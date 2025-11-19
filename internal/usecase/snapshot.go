@@ -1,6 +1,8 @@
 package usecase
 
 import (
+	"os"
+
 	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/parquet"
 	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/sqlite"
 	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
@@ -17,12 +19,17 @@ func NewSnapshot(parquet *parquet.Repo, sqlite *sqlite.Repo) *Snapshot {
 
 func (u *Snapshot) ComputeDiffs(snapshotDate, title string) ([]domain.Diff, error) {
 	prevDate, err := u.parquetRepo.GetPrevSnapshot(snapshotDate)
+	var prevSections []domain.Section
 	if err != nil {
-		return nil, err
-	}
-	prevSections, err := u.parquetRepo.ReadSections(prevDate, title)
-	if err != nil {
-		return nil, err
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+		// If no previous snapshot, prevSections remains empty
+	} else {
+		prevSections, err = u.parquetRepo.ReadSections(prevDate, title)
+		if err != nil {
+			return nil, err
+		}
 	}
 	currSections, err := u.parquetRepo.ReadSections(snapshotDate, title)
 	if err != nil {

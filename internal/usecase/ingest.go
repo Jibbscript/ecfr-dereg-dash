@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -49,7 +50,16 @@ func (u *Ingest) IngestTitle(ctx context.Context, title domain.Title) ([]domain.
 
 	rawSections, err := u.govinfo.ParseTitleXML(path)
 	if err != nil {
-		return nil, err
+		// Parsing failed, file might be corrupt. Delete and retry.
+		os.Remove(path)
+		path, err = u.govinfo.DownloadTitleXML(titleNum)
+		if err != nil {
+			return nil, err
+		}
+		rawSections, err = u.govinfo.ParseTitleXML(path)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	sections := []domain.Section{}

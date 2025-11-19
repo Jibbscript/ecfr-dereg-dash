@@ -22,17 +22,22 @@ func main() {
 	logger := platform.NewLogger(config.Env)
 	defer logger.Sync()
 
+	logger.Info("Config loaded", zap.String("DataDir", config.DataDir))
+
 	ctx := context.Background()
 
 	parquetRepo := parquet.NewRepo(config.DataDir)
-	sqliteRepo := sqlite.NewRepo(config.DataDir + "/ecfr.db")
+	sqlitePath := config.DataDir + "/ecfr.db"
+	logger.Info("Initializing SQLite", zap.String("path", sqlitePath))
+	sqliteRepo := sqlite.NewRepo(sqlitePath)
 
 	ecfrClient := ecfr.NewClient()
 	govinfoClient := govinfo.NewClient(config.DataDir)
 
 	vertexClient, err := vertexai.NewClient(ctx, config.VertexProjectID, config.VertexLocation, config.VertexModelID)
 	if err != nil {
-		logger.Fatal("Failed to create Vertex client", zap.Error(err))
+		logger.Warn("Failed to create Vertex client, using mock", zap.Error(err))
+		vertexClient = vertexai.NewMockClient()
 	}
 
 	lsaCollector := lsa.NewCollector(ecfrClient, vertexClient)
