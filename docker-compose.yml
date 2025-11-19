@@ -1,0 +1,31 @@
+version: '3'
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8080:8080"
+      - "4213:4213"
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env
+  etl:
+    build:
+      context: .
+      dockerfile: Dockerfile.etl
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env
+    depends_on:
+      - api
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api

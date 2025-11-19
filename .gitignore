@@ -1,0 +1,17 @@
+# Standard Go ignore
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+pkg/
+testdata/
+vendor/
+.DS_Store
+.env
+data/*
+!data/.gitkeep
+web/node_modules
+web/.nuxt
+infra/terraform.tfstate
