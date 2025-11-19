@@ -67,7 +67,27 @@ func (r *Repo) GetLatestSnapshot() (time.Time, error) {
 }
 
 func (r *Repo) GetPrevSnapshot(snapshot string) (string, error) {
-	return "", nil
+	entries, err := os.ReadDir(r.Root)
+	if err != nil {
+		return "", err
+	}
+	currentTime, err := time.Parse("2006-01-02", snapshot)
+	if err != nil {
+		return "", err
+	}
+	var prevDate time.Time
+	for _, e := range entries {
+		if e.IsDir() {
+			t, err := time.Parse("2006-01-02", e.Name())
+			if err == nil && t.Before(currentTime) && t.After(prevDate) {
+				prevDate = t
+			}
+		}
+	}
+	if prevDate.IsZero() {
+		return "", os.ErrNotExist
+	}
+	return prevDate.Format("2006-01-02"), nil
 }
 
 func (r *Repo) WriteDiffs(snapshot, title string, diffs []domain.Diff) error {

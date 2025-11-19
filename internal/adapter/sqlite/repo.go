@@ -3,6 +3,9 @@ package sqlite
 import (
 	"database/sql"
 
+	"os"
+	"path/filepath"
+
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
@@ -14,6 +17,9 @@ type Repo struct {
 }
 
 func NewRepo(path string) *Repo {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		panic(err)
+	}
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		panic(err)

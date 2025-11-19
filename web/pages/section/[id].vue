@@ -8,16 +8,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
-const section = ref({})
+const { data: section, error } = await useFetch(`/api/sections/${route.params.id}`)
 
-const fetchSection = async () => {
-  const res = await fetch(`/api/sections/${route.params.id}`)
-  section.value = await res.json()
+if (error.value) {
+  console.error('Error loading section:', error.value)
 }
-
-fetchSection()
 </script>

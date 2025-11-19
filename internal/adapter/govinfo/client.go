@@ -1,6 +1,7 @@
 package govinfo
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -21,22 +22,75 @@ type Client struct {
 
 func NewClient(dataDir string) *Client {
 	return &Client{
-		baseURL: "https://www.govinfo.gov/bulkdata/ECFR",
-		client:  &http.Client{Timeout: 10 * time.Minute}, // Long timeout for large files
+		baseURL: "https://www.govinfo.gov/bulkdata/json/ECFR",
+		client:  &http.Client{Timeout: 10 * time.Minute},
 		dataDir: dataDir,
 	}
 }
 
-// DownloadTitleXML downloads the latest XML for a given title
-func (c *Client) DownloadTitleXML(title int) (string, error) {
-	// Format: ECFR-{year}-Title-{title}.xml
-	// We need to find the correct URL. For simplicity, we'll assume a structure or use a directory listing if possible.
-	// GovInfo bulk data structure: /ECFR/{year}/Title-{title}/ECFR-{year}-Title-{title}.xml
-	year := time.Now().Year()
-	filename := fmt.Sprintf("ECFR-%d-Title-%d.xml", year, title)
-	url := fmt.Sprintf("%s/%d/Title-%d/%s", c.baseURL, year, title, filename)
+type IndexResponse struct {
+	Files []IndexFile `json:"files"`
+}
 
-	path := filepath.Join(c.dataDir, "raw", filename)
+type IndexFile struct {
+	Name     string `json:"name"`
+	CFRTitle int    `json:"cfrTitle"`
+	Link     string `json:"link"`
+}
+
+type TitleResponse struct {
+	Files []TitleFile `json:"files"`
+}
+
+type TitleFile struct {
+	Name          string `json:"name"`
+	FileExtension string `json:"fileExtension"`
+	Link          string `json:"link"`
+}
+
+// DownloadTitleXML downloads the latest XML for a given title using API discovery
+func (c *Client) DownloadTitleXML(title int) (string, error) {
+	// Step 1: Fetch main index
+	indexURL := c.baseURL
+	var indexResp IndexResponse
+	if err := c.fetchJSON(indexURL, &indexResp); err != nil {
+		return "", fmt.Errorf("failed to fetch index: %w", err)
+	}
+
+	// Step 2: Find link for title
+	var titleLink string
+	for _, f := range indexResp.Files {
+		if f.CFRTitle == title {
+			titleLink = f.Link
+			break
+		}
+	}
+	if titleLink == "" {
+		return "", fmt.Errorf("title %d not found in index", title)
+	}
+
+	// Step 3: Fetch title details
+	var titleResp TitleResponse
+	if err := c.fetchJSON(titleLink, &titleResp); err != nil {
+		return "", fmt.Errorf("failed to fetch title details: %w", err)
+	}
+
+	// Step 4: Find XML file link
+	var xmlLink string
+	var xmlName string
+	for _, f := range titleResp.Files {
+		if f.FileExtension == "xml" {
+			xmlLink = f.Link
+			xmlName = f.Name
+			break
+		}
+	}
+	if xmlLink == "" {
+		return "", fmt.Errorf("XML file not found for title %d", title)
+	}
+
+	// Step 5: Download file
+	path := filepath.Join(c.dataDir, "raw", xmlName)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return "", err
 	}
@@ -46,28 +100,62 @@ func (c *Client) DownloadTitleXML(title int) (string, error) {
 		return path, nil
 	}
 
-	resp, err := c.client.Get(url)
-	if err != nil {
+	if err := c.downloadFile(xmlLink, path); err != nil {
 		return "", err
+	}
+
+	return path, nil
+}
+
+func (c *Client) fetchJSON(url string, target interface{}) error {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("failed to download: %s", resp.Status)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status %s", resp.Status)
+	}
+
+	return json.NewDecoder(resp.Body).Decode(target)
+}
+
+func (c *Client) downloadFile(url, path string) error {
+	resp, err := c.client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download: %s", resp.Status)
 	}
 
 	f, err := os.Create(path)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer f.Close()
 
 	_, err = io.Copy(f, resp.Body)
-	return path, err
+	return err
 }
 
 // ParseTitleXML parses the XML file into sections
+// Note: This function remains largely the same as before, assuming the XML structure is what we expect.
+// We just need to ensure imports and package name are correct.
 func (c *Client) ParseTitleXML(path string) ([]domain.Section, error) {
+	// ... (rest of the parsing logic, which we can keep or re-implement if needed)
+	// Since replace_file_content replaces the whole range, I need to include the parsing logic here.
+	// I will copy the previous parsing logic.
+
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -81,8 +169,6 @@ func (c *Client) ParseTitleXML(path string) ([]domain.Section, error) {
 	// Real eCFR XML is complex. We'll look for DIV8 (Section) nodes.
 	// This is a simplified stream parser.
 
-	// var currentPart string
-	// var currentSectionTitle string
 	var currentText strings.Builder
 	var inSection bool
 	var sectionID string
@@ -102,9 +188,6 @@ func (c *Client) ParseTitleXML(path string) ([]domain.Section, error) {
 				inSection = true
 				sectionID = getAttr(se, "N")
 				currentText.Reset()
-			}
-			if inSection && se.Name.Local == "HEAD" {
-				// Capture title
 			}
 		case xml.CharData:
 			if inSection {

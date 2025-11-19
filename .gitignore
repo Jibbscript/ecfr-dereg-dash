@@ -8,10 +8,48 @@ bin/
 pkg/
 testdata/
 vendor/
+
+# Environment and OS
 .DS_Store
 .env
+.env.local
+.env.*.local
+
+# Data directories
 data/*
 !data/.gitkeep
-web/node_modules
-web/.nuxt
+
+# Frontend (Nuxt.js) build outputs
+web/node_modules/
+web/.nuxt/
+web/.output/
+web/dist/
+web/.cache/
+
+# Frontend test artifacts
+web/playwright-report/
+web/test-results/
+web/coverage/
+web/.nyc_output/
+
+# Frontend logs and temp files
+web/*.log
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
+web/pnpm-debug.log*
+web/.vite/
+
+# Infrastructure
 infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/.terraform/
+infra/*.tfvars
+!infra/*.tfvars.example
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

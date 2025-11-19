@@ -3,9 +3,10 @@ package vertexai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
-	"cloud.google.com/go/vertexai/genai"
 	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
+	"google.golang.org/genai"
 )
 
 type Client struct {
@@ -16,9 +17,13 @@ type Client struct {
 }
 
 func NewClient(ctx context.Context, projectID, location, modelID string) (*Client, error) {
-	client, err := genai.NewClient(ctx, projectID, location)
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		Project:  projectID,
+		Location: location,
+		Backend:  genai.BackendVertexAI,
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create genai client: %w", err)
 	}
 	return &Client{
 		projectID: projectID,
@@ -41,8 +46,8 @@ func (c *Client) GenerateSummary(ctx context.Context, prompt string) (string, er
 	if c.client == nil {
 		return "Mock summary for testing", nil
 	}
-	model := c.client.GenerativeModel(c.modelID)
-	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+
+	resp, err := c.client.Models.GenerateContent(ctx, c.modelID, genai.Text(prompt), nil)
 	if err != nil {
 		return "", err
 	}
@@ -51,8 +56,8 @@ func (c *Client) GenerateSummary(ctx context.Context, prompt string) (string, er
 	}
 
 	// Assuming text response
-	if txt, ok := resp.Candidates[0].Content.Parts[0].(genai.Text); ok {
-		return string(txt), nil
+	if part := resp.Candidates[0].Content.Parts[0]; part.Text != "" {
+		return part.Text, nil
 	}
 	return "", domain.ErrInvalidData
 }

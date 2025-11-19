@@ -1,6 +1,13 @@
 <template>
   <ClientOnly>
-    <table class="usa-table">
+    <div v-if="loading">Loading...</div>
+    <div v-else-if="error" class="usa-alert usa-alert--error">
+      <div class="usa-alert__body">
+        <h4 class="usa-alert__heading">Error</h4>
+        <p class="usa-alert__text">{{ error }}</p>
+      </div>
+    </div>
+    <table v-else class="usa-table">
       <thead>
         <tr>
           <th>Name</th>
@@ -32,6 +39,8 @@ const columns = [
 ]
 
 const agencies = ref([])
+const loading = ref(true)
+const error = ref(null)
 
 onMounted(async () => {
   try {
@@ -42,6 +51,9 @@ onMounted(async () => {
     console.log('Agencies loaded:', agencies.value)
   } catch (e) {
     console.error('Fetch error:', e)
+    error.value = e.message
+  } finally {
+    loading.value = false
   }
 })
 

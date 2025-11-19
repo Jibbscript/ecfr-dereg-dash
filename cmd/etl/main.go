@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/ecfr"
 	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/govinfo"
 	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/lsa"
@@ -16,6 +17,7 @@ import (
 )
 
 func main() {
+	_ = godotenv.Load()
 	config := platform.LoadConfig()
 	logger := platform.NewLogger(config.Env)
 	defer logger.Sync()

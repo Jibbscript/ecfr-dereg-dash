@@ -14,16 +14,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
-const title = ref({})
+const { data: title, error } = await useFetch(`/api/titles/${route.params.t}`)
 
-const fetchTitle = async () => {
-  const res = await fetch(`/api/titles/${route.params.t}`)
-  title.value = await res.json()
+if (error.value) {
+  console.error('Error loading title:', error.value)
 }
-
-fetchTitle()
 </script>
