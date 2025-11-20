@@ -27,7 +27,7 @@ web/.nuxt/
 web/.output/
 web/dist/
 web/.cache/
-web/node_modules/
+node_modules/
 bun.lock
 
 
