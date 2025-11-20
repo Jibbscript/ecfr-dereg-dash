@@ -27,6 +27,9 @@ web/.nuxt/
 web/.output/
 web/dist/
 web/.cache/
+web/node_modules/
+bun.lock
+
 
 # Frontend test artifacts
 web/playwright-report/
