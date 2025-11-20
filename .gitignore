@@ -16,10 +16,10 @@ vendor/
 .env.*.local
 
 # Data directories and test files
-data/*
+#data/*
 !data/.gitkeep
-data*.parquet
-data*/
+#data*.parquet
+#data*/
 
 # Frontend (Nuxt.js) build outputs
 web/node_modules/
