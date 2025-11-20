@@ -6,5 +6,21 @@ COPY . .
 RUN go build -o api ./cmd/api
 
 FROM alpine:latest
+# Install certificates for external requests (if needed)
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+# Copy the built binary
 COPY --from=builder /app/api /api
+
+# Create the data directory
+RUN mkdir -p /app/data
+
+# Copy the SQLite database and existing data (includes 2025-11-19/ parquet files)
+COPY data/ /app/data/
+
+# Set the environment variable to point to the data directory
+ENV DATA_DIR=/app/data
+
 CMD ["/api"]
