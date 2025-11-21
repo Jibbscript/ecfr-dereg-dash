@@ -51,7 +51,7 @@ func main() {
 		Ingest:    usecase.NewIngest(logger, govinfoClient, lsaCollector, parquetRepo, sqliteRepo),
 		Snapshot:  usecase.NewSnapshot(parquetRepo, sqliteRepo),
 		Metrics:   usecase.NewMetrics(duckHelper, sqliteRepo),
-		Summaries: usecase.NewSummaries(vertexClient, parquetRepo),
+		Summaries: usecase.NewSummaries(logger, vertexClient, parquetRepo),
 	}
 
 	r := chi.NewRouter()
