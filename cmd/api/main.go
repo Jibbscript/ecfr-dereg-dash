@@ -50,7 +50,7 @@ func main() {
 	usecases := delivery.Usecases{
 		Ingest:    usecase.NewIngest(govinfoClient, lsaCollector, parquetRepo, sqliteRepo),
 		Snapshot:  usecase.NewSnapshot(parquetRepo, sqliteRepo),
-		Metrics:   usecase.NewMetrics(duckHelper),
+		Metrics:   usecase.NewMetrics(duckHelper, sqliteRepo),
 		Summaries: usecase.NewSummaries(vertexClient, parquetRepo),
 	}
 

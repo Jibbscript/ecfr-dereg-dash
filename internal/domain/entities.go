@@ -7,6 +7,14 @@ type Agency struct {
 	Name string
 }
 
+type AgencyMetric struct {
+	ID         string  `json:"id"`
+	Name       string  `json:"name"`
+	TotalWords int     `json:"total_words"`
+	AvgRSCS    float64 `json:"avg_rscs"`
+	LSACounts  int     `json:"lsa_counts"`
+}
+
 type Title struct {
 	Title           string
 	Name            string

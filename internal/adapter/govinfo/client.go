@@ -172,6 +172,7 @@ func (c *Client) ParseTitleXML(path string) ([]domain.Section, error) {
 	var currentText strings.Builder
 	var inSection bool
 	var sectionID string
+	var currentAgencyID string
 
 	for {
 		t, err := decoder.Token()
@@ -184,6 +185,9 @@ func (c *Client) ParseTitleXML(path string) ([]domain.Section, error) {
 
 		switch se := t.(type) {
 		case xml.StartElement:
+			if getAttr(se, "TYPE") == "CHAPTER" {
+				currentAgencyID = getAttr(se, "N")
+			}
 			if se.Name.Local == "DIV8" {
 				inSection = true
 				sectionID = getAttr(se, "N")
@@ -197,9 +201,10 @@ func (c *Client) ParseTitleXML(path string) ([]domain.Section, error) {
 			if se.Name.Local == "DIV8" {
 				inSection = false
 				sections = append(sections, domain.Section{
-					ID:      sectionID,
-					Section: sectionID, // Simplified
-					Text:    currentText.String(),
+					ID:       sectionID,
+					Section:  sectionID,
+					AgencyID: currentAgencyID,
+					Text:     currentText.String(),
 					// Other fields need more context or post-processing
 				})
 			}

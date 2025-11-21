@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -17,19 +18,17 @@ type Usecases struct {
 
 func SetupHandlers(r chi.Router, usecases Usecases, logger *zap.Logger) {
 	r.Get("/agencies", func(w http.ResponseWriter, req *http.Request) {
-		_, err := usecases.Metrics.GetAgencyTotals()
+		agencies, err := usecases.Metrics.GetAgencyTotals()
 		if err != nil {
 			logger.Error("Get agencies failed", zap.Error(err))
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
 		}
-		// Placeholder JSON with dummy data for E2E
-		dummyAgencies := `[
-		{"id": "1", "name": "Department of Agriculture", "slug": "usda", "metric": 100},
-		{"id": "2", "name": "Department of Commerce", "slug": "doc", "metric": 200}
-	]`
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(dummyAgencies))
+		if err := json.NewEncoder(w).Encode(agencies); err != nil {
+			logger.Error("Failed to encode response", zap.Error(err))
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+		}
 	})
 
 	r.Get("/titles/{id}", func(w http.ResponseWriter, req *http.Request) {

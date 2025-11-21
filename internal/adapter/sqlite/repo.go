@@ -69,3 +69,31 @@ func (r *Repo) InsertSections(sections []domain.Section) error {
 	}
 	return tx.Commit()
 }
+
+func (r *Repo) GetAgencyTotals() ([]domain.AgencyMetric, error) {
+	rows, err := r.db.Query(`
+		SELECT 
+			agency_id, 
+			SUM(word_count) as total_words, 
+			AVG(rscs_per_1k) as avg_rscs 
+		FROM sections 
+		GROUP BY agency_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var metrics []domain.AgencyMetric
+	for rows.Next() {
+		var m domain.AgencyMetric
+		if err := rows.Scan(&m.ID, &m.TotalWords, &m.AvgRSCS); err != nil {
+			return nil, err
+		}
+		// For now, use ID as Name or map it if we have a mapping table.
+		// Since we don't have an agencies table, we'll just use the ID.
+		m.Name = m.ID
+		metrics = append(metrics, m)
+	}
+	return metrics, nil
+}
