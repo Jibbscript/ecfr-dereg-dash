@@ -20,6 +20,7 @@ vendor/
 !data/.gitkeep
 #data*.parquet
 #data*/
+data/2025-11-21
 
 # Frontend (Nuxt.js) build outputs
 web/node_modules/
