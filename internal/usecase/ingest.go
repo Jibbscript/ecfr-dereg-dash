@@ -15,17 +15,19 @@ import (
 	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/parquet"
 	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/sqlite"
 	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
+	"go.uber.org/zap"
 )
 
 type Ingest struct {
+	logger      *zap.Logger
 	govinfo     *govinfo.Client
 	lsa         *lsa.Collector
 	parquetRepo *parquet.Repo
 	sqliteRepo  *sqlite.Repo
 }
 
-func NewIngest(govinfo *govinfo.Client, lsa *lsa.Collector, parquet *parquet.Repo, sqlite *sqlite.Repo) *Ingest {
-	return &Ingest{govinfo: govinfo, lsa: lsa, parquetRepo: parquet, sqliteRepo: sqlite}
+func NewIngest(logger *zap.Logger, govinfo *govinfo.Client, lsa *lsa.Collector, parquet *parquet.Repo, sqlite *sqlite.Repo) *Ingest {
+	return &Ingest{logger: logger, govinfo: govinfo, lsa: lsa, parquetRepo: parquet, sqliteRepo: sqlite}
 }
 
 func (u *Ingest) FetchChangedTitles(ctx context.Context) ([]domain.Title, error) {
@@ -42,28 +44,43 @@ func (u *Ingest) FetchChangedTitles(ctx context.Context) ([]domain.Title, error)
 }
 
 func (u *Ingest) IngestTitle(ctx context.Context, title domain.Title) ([]domain.Section, error) {
+	u.logger.Info("Starting ingestion for title", zap.String("title", title.Title))
+	start := time.Now()
+
 	titleNum, _ := strconv.Atoi(title.Title)
+
+	u.logger.Debug("Downloading title XML", zap.Int("title_num", titleNum))
 	path, err := u.govinfo.DownloadTitleXML(titleNum)
 	if err != nil {
+		u.logger.Error("Failed to download title XML", zap.String("title", title.Title), zap.Error(err))
 		return nil, err
 	}
+	u.logger.Debug("Download complete", zap.String("path", path))
 
+	u.logger.Debug("Parsing title XML", zap.String("path", path))
 	rawSections, err := u.govinfo.ParseTitleXML(path)
 	if err != nil {
+		u.logger.Warn("Parsing failed, retrying download", zap.String("path", path), zap.Error(err))
 		// Parsing failed, file might be corrupt. Delete and retry.
 		os.Remove(path)
 		path, err = u.govinfo.DownloadTitleXML(titleNum)
 		if err != nil {
+			u.logger.Error("Retry download failed", zap.String("title", title.Title), zap.Error(err))
 			return nil, err
 		}
 		rawSections, err = u.govinfo.ParseTitleXML(path)
 		if err != nil {
+			u.logger.Error("Retry parsing failed", zap.String("title", title.Title), zap.Error(err))
 			return nil, err
 		}
 	}
+	u.logger.Info("Parsing complete", zap.Int("sections_found", len(rawSections)))
 
 	sections := []domain.Section{}
-	for _, raw := range rawSections {
+	for i, raw := range rawSections {
+		if i%100 == 0 && i > 0 {
+			u.logger.Debug("Processing sections", zap.Int("processed", i), zap.Int("total", len(rawSections)))
+		}
 		text := normalizeText(raw.Text)
 		checksum := sha256.Sum256([]byte(text))
 		wordCount := len(strings.Fields(text))
@@ -97,6 +114,12 @@ func (u *Ingest) IngestTitle(ctx context.Context, title domain.Title) ([]domain.
 			SnapshotDate:   time.Now().Format("2006-01-02"),
 		})
 	}
+
+	u.logger.Info("Ingestion finished for title",
+		zap.String("title", title.Title),
+		zap.Duration("duration", time.Since(start)),
+		zap.Int("sections_generated", len(sections)),
+	)
 	return sections, nil
 }
 
