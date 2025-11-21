@@ -55,7 +55,7 @@ func (u *Summaries) GenerateForTitle(ctx context.Context, title domain.Title, se
 				Kind:      "section",
 				Key:       sec.ID,
 				Text:      resp,
-				Model:     "gemini-3-pro",
+				Model:     "gemini-3-pro-preview",
 				CreatedAt: time.Now(),
 			})
 			mu.Unlock()
