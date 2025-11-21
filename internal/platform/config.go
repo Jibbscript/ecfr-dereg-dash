@@ -25,8 +25,8 @@ func LoadConfig() Config {
 		Env:             os.Getenv("ENV"),
 		DataDir:         getEnv("DATA_DIR", "data"),
 		VertexProjectID: os.Getenv("VERTEX_PROJECT_ID"),
-		VertexLocation:  getEnv("VERTEX_LOCATION", "us-central1"),
-		VertexModelID:   getEnv("VERTEX_MODEL_ID", "gemini-3-pro-preview"),
+		VertexLocation:  getEnv("VERTEX_LOCATION", "global"),
+		VertexModelID:   getEnv("VERTEX_MODEL_ID", "gemini-3-pro"),
 		DuckDBUI:        os.Getenv("DUCKDB_UI") == "1",
 	}
 }
