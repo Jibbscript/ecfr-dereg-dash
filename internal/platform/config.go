@@ -16,10 +16,17 @@ type Config struct {
 func LoadConfig() Config {
 	return Config{
 		Env:             os.Getenv("ENV"),
-		DataDir:         os.Getenv("DATA_DIR"),
+		DataDir:         getEnv("DATA_DIR", "data"),
 		VertexProjectID: os.Getenv("VERTEX_PROJECT_ID"),
 		VertexLocation:  os.Getenv("VERTEX_LOCATION"),
 		VertexModelID:   os.Getenv("VERTEX_MODEL_ID"),
 		DuckDBUI:        os.Getenv("DUCKDB_UI") == "1",
 	}
+}
+
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
 }
