@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/govinfo"
@@ -76,44 +78,65 @@ func (u *Ingest) IngestTitle(ctx context.Context, title domain.Title) ([]domain.
 	}
 	u.logger.Info("Parsing complete", zap.Int("sections_found", len(rawSections)))
 
-	sections := []domain.Section{}
+	// Optimization: Pre-allocate result slice to preserve order and avoid mutex on append
+	numSections := len(rawSections)
+	sections := make([]domain.Section, numSections)
+
+	// Optimization: Worker pool for CPU-bound regex operations
+	// Use 2x logical cores for better saturation if some ops block slightly, 
+	// though these are mostly pure CPU.
+	numWorkers := runtime.NumCPU()
+	sem := make(chan struct{}, numWorkers)
+	var wg sync.WaitGroup
+	
+	// Snapshot date is constant for the batch
+	snapshotDate := time.Now().Format("2006-01-02")
+
 	for i, raw := range rawSections {
-		if i%100 == 0 && i > 0 {
-			u.logger.Debug("Processing sections", zap.Int("processed", i), zap.Int("total", len(rawSections)))
-		}
-		text := normalizeText(raw.Text)
-		checksum := sha256.Sum256([]byte(text))
-		wordCount := len(strings.Fields(text))
+		wg.Add(1)
+		sem <- struct{}{} // Acquire token
+		
+		go func(idx int, raw domain.Section) {
+			defer wg.Done()
+			defer func() { <-sem }() // Release token
 
-		defCount := countDefs(text)
-		xrefCount := countXrefs(text)
-		modalCount := countModals(text)
+			text := normalizeText(raw.Text)
+			checksum := sha256.Sum256([]byte(text))
+			wordCount := len(strings.Fields(text))
 
-		rscsRaw := wordCount + 20*defCount + 50*xrefCount + 100*modalCount
-		rscsPer1K := 0.0
-		if wordCount > 0 {
-			rscsPer1K = 1000.0 * float64(rscsRaw) / float64(wordCount)
-		}
+			defCount := countDefs(text)
+			xrefCount := countXrefs(text)
+			modalCount := countModals(text)
 
-		sections = append(sections, domain.Section{
-			ID:             raw.ID,
-			Title:          title.Title,
-			Part:           raw.Part,
-			Section:        raw.Section,
-			AgencyID:       raw.AgencyID,
-			Path:           raw.Path,
-			Text:           raw.Text,
-			RevDate:        raw.RevDate,
-			ChecksumSHA256: hex.EncodeToString(checksum[:]),
-			WordCount:      wordCount,
-			DefCount:       defCount,
-			XrefCount:      xrefCount,
-			ModalCount:     modalCount,
-			RSCSRaw:        rscsRaw,
-			RSCSPer1K:      rscsPer1K,
-			SnapshotDate:   time.Now().Format("2006-01-02"),
-		})
+			rscsRaw := wordCount + 20*defCount + 50*xrefCount + 100*modalCount
+			rscsPer1K := 0.0
+			if wordCount > 0 {
+				rscsPer1K = 1000.0 * float64(rscsRaw) / float64(wordCount)
+			}
+
+			// Assign directly to pre-allocated slice index - thread safe
+			sections[idx] = domain.Section{
+				ID:             raw.ID,
+				Title:          title.Title,
+				Part:           raw.Part,
+				Section:        raw.Section,
+				AgencyID:       raw.AgencyID,
+				Path:           raw.Path,
+				Text:           raw.Text,
+				RevDate:        raw.RevDate,
+				ChecksumSHA256: hex.EncodeToString(checksum[:]),
+				WordCount:      wordCount,
+				DefCount:       defCount,
+				XrefCount:      xrefCount,
+				ModalCount:     modalCount,
+				RSCSRaw:        rscsRaw,
+				RSCSPer1K:      rscsPer1K,
+				SnapshotDate:   snapshotDate,
+			}
+		}(i, raw)
 	}
+
+	wg.Wait()
 
 	u.logger.Info("Ingestion finished for title",
 		zap.String("title", title.Title),
