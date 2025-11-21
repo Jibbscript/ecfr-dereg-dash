@@ -46,7 +46,7 @@ func main() {
 
 	lsaCollector := lsa.NewCollector(ecfrClient, vertexClient)
 
-	ingestUseCase := usecase.NewIngest(govinfoClient, lsaCollector, parquetRepo, sqliteRepo)
+	ingestUseCase := usecase.NewIngest(logger, govinfoClient, lsaCollector, parquetRepo, sqliteRepo)
 	summariesUseCase := usecase.NewSummaries(vertexClient, parquetRepo)
 
 	snapshotDate := time.Now().Format("2006-01-02")
