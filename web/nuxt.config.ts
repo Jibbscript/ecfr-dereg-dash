@@ -8,9 +8,6 @@ export default defineNuxtConfig({
   nuxtUswds: {
     autoImportComponents: true,
     componentPrefix: 'Usa',
-    vueUswds: {
-      routerComponentName: 'NuxtLink'
-    }
   },
   devtools: { enabled: true },
   nitro: {
@@ -19,6 +16,19 @@ export default defineNuxtConfig({
     },
     routeRules: {
       '/api/**': { proxy: 'http://localhost:8080/api/**' }
+    }
+  },
+  vite: {
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (id.includes('node_modules')) {
+              return 'vendor';
+            }
+          }
+        }
+      }
     }
   }
 })
