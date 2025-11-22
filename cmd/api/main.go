@@ -26,12 +26,19 @@ func main() {
 
 	ctx := context.Background()
 
-	parquetRepo := parquet.NewRepo(config.DataDir)
+	parquetRepo, err := parquet.NewRepo(ctx, config.ParquetBucket, config.ParquetPrefix)
+	if err != nil {
+		logger.Fatal("Failed to create Parquet repo", zap.Error(err))
+	}
+
 	sqliteRepo := sqlite.NewRepo(config.DataDir + "/ecfr.db")
 	duckHelper := duck.NewHelper(parquetRepo, sqliteRepo, config.DuckDBUI)
 
 	ecfrClient := ecfr.NewClient() // Still kept for LSA if needed, or remove if unused
-	govinfoClient := govinfo.NewClient(config.DataDir)
+	govinfoClient, err := govinfo.NewClient(ctx, config.RawXMLBucket, config.RawXMLPrefix)
+	if err != nil {
+		logger.Fatal("Failed to create GovInfo client", zap.Error(err))
+	}
 
 	var vertexClient *vertexai.Client
 	if os.Getenv("SKIP_VERTEX") == "true" {
@@ -39,7 +46,7 @@ func main() {
 		vertexClient = vertexai.NewMockClient()
 	} else {
 		var err error
-		vertexClient, err = vertexai.NewClient(ctx, config.VertexProjectID, config.VertexLocation, config.VertexModelID)
+		vertexClient, err = vertexai.NewClient(ctx, config.VertexProjectID, config.VertexLocation, config.VertexModelID, config.GCSBucket)
 		if err != nil {
 			logger.Fatal("Failed to create Vertex client", zap.Error(err))
 		}

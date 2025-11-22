@@ -1,15 +1,17 @@
 package govinfo
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
+	"path"
 	"strings"
 	"time"
+
+	"cloud.google.com/go/storage"
 
 	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
 )
@@ -17,15 +19,24 @@ import (
 type Client struct {
 	baseURL string
 	client  *http.Client
-	dataDir string
+
+	gcsClient     *storage.Client
+	rawBucketName string
+	rawPrefix     string
 }
 
-func NewClient(dataDir string) *Client {
-	return &Client{
-		baseURL: "https://www.govinfo.gov/bulkdata/json/ECFR",
-		client:  &http.Client{Timeout: 10 * time.Minute},
-		dataDir: dataDir,
+func NewClient(ctx context.Context, rawBucketName, rawPrefix string) (*Client, error) {
+	gcs, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, err
 	}
+	return &Client{
+		baseURL:       "https://www.govinfo.gov/bulkdata/json/ECFR",
+		client:        &http.Client{Timeout: 10 * time.Minute},
+		gcsClient:     gcs,
+		rawBucketName: rawBucketName,
+		rawPrefix:     rawPrefix,
+	}, nil
 }
 
 type IndexResponse struct {
@@ -48,63 +59,60 @@ type TitleFile struct {
 	Link          string `json:"link"`
 }
 
-// DownloadTitleXML downloads the latest XML for a given title using API discovery
-func (c *Client) DownloadTitleXML(title int) (string, error) {
-	// Step 1: Fetch main index
-	indexURL := c.baseURL
-	var indexResp IndexResponse
-	if err := c.fetchJSON(indexURL, &indexResp); err != nil {
-		return "", fmt.Errorf("failed to fetch index: %w", err)
+func (c *Client) objectPath(xmlName string) string {
+	if c.rawPrefix == "" {
+		return xmlName
 	}
+	return path.Join(c.rawPrefix, xmlName)
+}
 
-	// Step 2: Find link for title
-	var titleLink string
-	for _, f := range indexResp.Files {
-		if f.CFRTitle == title {
-			titleLink = f.Link
-			break
-		}
-	}
-	if titleLink == "" {
-		return "", fmt.Errorf("title %d not found in index", title)
-	}
+// DownloadTitleXML downloads the latest XML for a given title into GCS.
+func (c *Client) DownloadTitleXML(ctx context.Context, title int) (string, error) {
+	// NOTE: The GovInfo Bulk Data JSON API is currently returning 404s.
+	// We fallback to using the predictable XML paths directly.
+	// Pattern: https://www.govinfo.gov/bulkdata/ECFR/title-{title}/ECFR-title{title}.xml
 
-	// Step 3: Fetch title details
-	var titleResp TitleResponse
-	if err := c.fetchJSON(titleLink, &titleResp); err != nil {
-		return "", fmt.Errorf("failed to fetch title details: %w", err)
-	}
+	xmlName := fmt.Sprintf("ECFR-title%d.xml", title)
+	xmlLink := fmt.Sprintf("https://www.govinfo.gov/bulkdata/ECFR/title-%d/%s", title, xmlName)
 
-	// Step 4: Find XML file link
-	var xmlLink string
-	var xmlName string
-	for _, f := range titleResp.Files {
-		if f.FileExtension == "xml" {
-			xmlLink = f.Link
-			xmlName = f.Name
-			break
-		}
-	}
-	if xmlLink == "" {
-		return "", fmt.Errorf("XML file not found for title %d", title)
-	}
-
-	// Step 5: Download file
-	path := filepath.Join(c.dataDir, "raw", xmlName)
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return "", err
-	}
+	// Step 5: Download file to GCS
+	objPath := c.objectPath(xmlName)
+	obj := c.gcsClient.Bucket(c.rawBucketName).Object(objPath)
 
 	// Check if already exists
-	if _, err := os.Stat(path); err == nil {
-		return path, nil
+	if _, err := obj.Attrs(ctx); err == nil {
+		return objPath, nil
 	}
 
-	if err := c.downloadFile(xmlLink, path); err != nil {
+	resp, err := c.client.Get(xmlLink)
+	if err != nil {
 		return "", err
 	}
+	defer resp.Body.Close()
 
-	return path, nil
+	if resp.StatusCode != http.StatusOK {
+		// Read body for error details
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		
+		// If 404, it might be a missing/reserved title (not all 1-50 exist).
+		// We return a specific error that the caller can check to skip gracefully.
+		if resp.StatusCode == http.StatusNotFound {
+			return "", domain.ErrNotFound
+		}
+		
+		return "", fmt.Errorf("failed to download XML from %s: status %s, body: %q", xmlLink, resp.Status, string(bodyBytes))
+	}
+
+	w := obj.NewWriter(ctx)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		_ = w.Close()
+		return "", fmt.Errorf("writing XML to GCS object %q: %w", objPath, err)
+	}
+	if err := w.Close(); err != nil {
+		return "", fmt.Errorf("closing GCS writer for %q: %w", objPath, err)
+	}
+
+	return objPath, nil
 }
 
 func (c *Client) fetchJSON(url string, target interface{}) error {
@@ -120,55 +128,27 @@ func (c *Client) fetchJSON(url string, target interface{}) error {
 	}
 	defer resp.Body.Close()
 
+	// Check for 404 or other errors
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status %s", resp.Status)
+		// Read body for error details
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("GET %s: status %s, body: %q", url, resp.Status, string(bodyBytes))
 	}
 
 	return json.NewDecoder(resp.Body).Decode(target)
 }
 
-func (c *Client) downloadFile(url, path string) error {
-	resp, err := c.client.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download: %s", resp.Status)
-	}
-
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = io.Copy(f, resp.Body)
-	return err
-}
-
-// ParseTitleXML parses the XML file into sections
-// Note: This function remains largely the same as before, assuming the XML structure is what we expect.
-// We just need to ensure imports and package name are correct.
-func (c *Client) ParseTitleXML(path string) ([]domain.Section, error) {
-	// ... (rest of the parsing logic, which we can keep or re-implement if needed)
-	// Since replace_file_content replaces the whole range, I need to include the parsing logic here.
-	// I will copy the previous parsing logic.
-
-	f, err := os.Open(path)
+// ParseTitleXML reads XML from GCS instead of local disk.
+func (c *Client) ParseTitleXML(ctx context.Context, objPath string) ([]domain.Section, error) {
+	rc, err := c.gcsClient.Bucket(c.rawBucketName).Object(objPath).NewReader(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer rc.Close()
+
+	decoder := xml.NewDecoder(rc)
 
 	var sections []domain.Section
-	decoder := xml.NewDecoder(f)
-
-	// Simplified XML parsing logic.
-	// Real eCFR XML is complex. We'll look for DIV8 (Section) nodes.
-	// This is a simplified stream parser.
-
 	var currentText strings.Builder
 	var inSection bool
 	var sectionID string
@@ -205,7 +185,6 @@ func (c *Client) ParseTitleXML(path string) ([]domain.Section, error) {
 					Section:  sectionID,
 					AgencyID: currentAgencyID,
 					Text:     currentText.String(),
-					// Other fields need more context or post-processing
 				})
 			}
 		}

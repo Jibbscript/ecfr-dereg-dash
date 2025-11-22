@@ -34,15 +34,23 @@ func main() {
 
 	ctx := context.Background()
 
-	parquetRepo := parquet.NewRepo(config.DataDir)
+	parquetRepo, err := parquet.NewRepo(ctx, config.ParquetBucket, config.ParquetPrefix)
+	if err != nil {
+		logger.Fatal("Failed to create Parquet repo", zap.Error(err))
+	}
+
 	sqlitePath := config.DataDir + "/ecfr.db"
 	logger.Info("Initializing storage adapters", zap.String("sqlite_path", sqlitePath))
 	sqliteRepo := sqlite.NewRepo(sqlitePath)
 
 	ecfrClient := ecfr.NewClient()
-	govinfoClient := govinfo.NewClient(config.DataDir)
+	
+	govinfoClient, err := govinfo.NewClient(ctx, config.RawXMLBucket, config.RawXMLPrefix)
+	if err != nil {
+		logger.Fatal("Failed to create GovInfo client", zap.Error(err))
+	}
 
-	vertexClient, err := vertexai.NewClient(ctx, config.VertexProjectID, config.VertexLocation, config.VertexModelID)
+	vertexClient, err := vertexai.NewClient(ctx, config.VertexProjectID, config.VertexLocation, config.VertexModelID, config.GCSBucket)
 	if err != nil {
 		logger.Warn("Failed to create Vertex client, using mock", zap.Error(err))
 		vertexClient = vertexai.NewMockClient()
@@ -113,12 +121,16 @@ func main() {
 			// Note: IngestTitle is now internally parallelized for regex ops
 			sections, err := ingestUseCase.IngestTitle(ctx, t)
 			if err != nil {
+				if err == domain.ErrNotFound {
+					logger.Warn("Title not found (skipping)", zap.String("title", t.Title))
+					return
+				}
 				logger.Error("Ingest failed for title", zap.String("title", t.Title), zap.Error(err))
 				return
 			}
 
 			// Write to Parquet (Thread-safe for different titles)
-			if err := parquetRepo.WriteSections(snapshotDate, t.Title, sections); err != nil {
+			if err := parquetRepo.WriteSections(ctx, snapshotDate, t.Title, sections); err != nil {
 				logger.Error("Parquet write failed", zap.String("title", t.Title), zap.Error(err))
 			}
 
@@ -130,11 +142,11 @@ func main() {
 			}
 
 			// Step 3: Compute deltas (Transform)
-			diffs, err := snapshotUseCase.ComputeDiffs(snapshotDate, t.Title)
+			diffs, err := snapshotUseCase.ComputeDiffs(ctx, snapshotDate, t.Title)
 			if err != nil {
 				logger.Error("Diff compute failed", zap.String("title", t.Title), zap.Error(err))
 			} else {
-				if err := parquetRepo.WriteDiffs(snapshotDate, t.Title, diffs); err != nil {
+				if err := parquetRepo.WriteDiffs(ctx, snapshotDate, t.Title, diffs); err != nil {
 					logger.Error("Diff write failed", zap.String("title", t.Title), zap.Error(err))
 				}
 			}
@@ -144,7 +156,7 @@ func main() {
 			if err != nil {
 				logger.Error("LSA collect failed", zap.String("title", t.Title), zap.Error(err))
 			} else {
-				if err := parquetRepo.WriteLSA(snapshotDate, t.Title, lsaCounts); err != nil {
+				if err := parquetRepo.WriteLSA(ctx, snapshotDate, t.Title, lsaCounts); err != nil {
 					logger.Error("LSA write failed", zap.String("title", t.Title), zap.Error(err))
 				}
 			}
@@ -179,7 +191,7 @@ func main() {
 	// Load Summaries (Single batch write to avoid file contention)
 	if len(allSummaries) > 0 {
 		logger.Info("Writing gathered summaries", zap.Int("count", len(allSummaries)))
-		if err := parquetRepo.WriteSummaries(snapshotDate, allSummaries); err != nil {
+		if err := parquetRepo.WriteSummaries(ctx, snapshotDate, allSummaries); err != nil {
 			logger.Error("Summaries write failed", zap.Error(err))
 		}
 	}
