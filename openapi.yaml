@@ -1,0 +1,218 @@
+openapi: 3.0.0
+info:
+  title: eCFR Deregulation Dashboard API
+  version: "1.0.0"
+  description: |
+    API for accessing deregulation metrics and dummy title/section data for the eCFR Deregulation Dashboard.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /agencies:
+    get:
+      summary: List agency metrics
+      description: |
+        Returns deregulation-related metrics for all agencies.
+
+        The response items correspond to the `AgencyMetric` Go struct.
+      operationId: listAgencies
+      responses:
+        '200':
+          description: A list of agency metrics.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgencyMetric'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /titles/{id}:
+    get:
+      summary: Get title metrics (dummy data)
+      description: |
+        Returns dummy metrics and a summary for a specific title.
+
+        This endpoint is currently backed by static JSON for E2E testing
+        and does **not** use the `Title` domain struct. The schema here
+        reflects the dummy response shape.
+      operationId: getTitle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Numeric or string identifier of the title.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dummy title metrics and summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TitleDummy'
+              example:
+                id: "12"
+                title: "Title 12"
+                total_words: 50000
+                avg_rscs: 15.5
+                summary: "This is a summary for Title 12. It contains regulatory information about various topics."
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /sections/{id}:
+    get:
+      summary: Get section details (dummy data)
+      description: |
+        Returns dummy section text, RSCS metric, and a summary for a specific section.
+
+        This endpoint is currently backed by static JSON for E2E testing
+        and does **not** use the `Section` domain struct. The schema here
+        reflects the dummy response shape.
+      operationId: getSection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identifier of the section (e.g., "1.2.3").
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dummy section content and summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionDummy'
+              example:
+                id: "1.2.3"
+                section: "§ 1.2.3"
+                text: "This is the full text of section 1.2.3. It contains detailed regulatory requirements and compliance information that would typically be much longer in a real application."
+                rscs_per_1k: 12.3
+                summary: "Summary of section 1.2.3 discussing key regulatory requirements."
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    AgencyMetric:
+      type: object
+      description: |
+        Metrics for a single agency, matching the `AgencyMetric` Go struct.
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the agency.
+        name:
+          type: string
+          description: Human-readable agency name.
+        total_words:
+          type: integer
+          format: int64
+          description: Total word count across relevant regulatory sections.
+        avg_rscs:
+          type: number
+          format: double
+          description: Average RSCS (Regulatory Complexity Score) across sections.
+        lsa_counts:
+          type: integer
+          format: int32
+          description: Count of LSA (List of Sections Affected) entries related to the agency.
+      required:
+        - id
+        - name
+        - total_words
+        - avg_rscs
+        - lsa_counts
+      example:
+        id: "EPA"
+        name: "Environmental Protection Agency"
+        total_words: 1234567
+        avg_rscs: 18.7
+        lsa_counts: 42
+
+    TitleDummy:
+      type: object
+      description: |
+        Dummy representation of a title and its deregulation metrics,
+        matching the static JSON returned by the `/titles/{id}` handler.
+      properties:
+        id:
+          type: string
+          description: Identifier of the title.
+        title:
+          type: string
+          description: Human-readable title label.
+        total_words:
+          type: integer
+          format: int64
+          description: Total number of words in the title's regulatory text.
+        avg_rscs:
+          type: number
+          format: double
+          description: Average RSCS (Regulatory Complexity Score) for the title.
+        summary:
+          type: string
+          description: Human-readable summary of the title.
+      required:
+        - id
+        - title
+        - total_words
+        - avg_rscs
+        - summary
+
+    SectionDummy:
+      type: object
+      description: |
+        Dummy representation of a section, its content, and complexity metric,
+        matching the static JSON returned by the `/sections/{id}` handler.
+      properties:
+        id:
+          type: string
+          description: Identifier of the section.
+        section:
+          type: string
+          description: Section label, including the section symbol (e.g., "§ 1.2.3").
+        text:
+          type: string
+          description: Full text of the section.
+        rscs_per_1k:
+          type: number
+          format: double
+          description: RSCS (Regulatory Complexity Score) per 1,000 words.
+        summary:
+          type: string
+          description: Human-readable summary of the section.
+      required:
+        - id
+        - section
+        - text
+        - rscs_per_1k
+        - summary
+
+    Error:
+      type: object
+      description: Generic error response.
+      properties:
+        message:
+          type: string
+          description: Description of the error.
+      required:
+        - message
+      example:
+        message: "Internal error"

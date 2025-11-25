@@ -1,0 +1,5 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [ 'build', '-t', 'us-central1-docker.pkg.dev/formal-flow-3rmrd/ecfr-repo/ecfr-web', '-f', 'Dockerfile.web', '.' ]
+images:
+  - 'us-central1-docker.pkg.dev/formal-flow-3rmrd/ecfr-repo/ecfr-web'

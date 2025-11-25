@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"runtime"
 	"sync"
@@ -26,22 +27,46 @@ func main() {
 	logger := platform.NewLogger(config.Env)
 	defer logger.Sync()
 
+	// Parse command line flags
+	skipSummary := flag.Bool("skip-summary", false, "Skip the summary generation step")
+	flag.Parse()
+
 	logger.Info("Starting ETL Pipeline (Optimized)",
 		zap.String("env", config.Env),
 		zap.String("data_dir", config.DataDir),
-		zap.Int("gomaxprocs", runtime.GOMAXPROCS(0)))
+		zap.Int("gomaxprocs", runtime.GOMAXPROCS(0)),
+		zap.Bool("skip_summary", *skipSummary))
 	pipelineStart := time.Now()
 
 	ctx := context.Background()
 
-	parquetRepo, err := parquet.NewRepo(ctx, config.ParquetBucket, config.ParquetPrefix)
-	if err != nil {
-		logger.Fatal("Failed to create Parquet repo", zap.Error(err))
+	var parquetRepo *parquet.Repo
+	var err error
+
+	// GCS backend (prod/staging)
+	if config.Env == "local" || config.Env == "dev" {
+		// Local filesystem backend
+		parquetRepo, err = parquet.NewLocalRepo(config.DataDir, config.ParquetPrefix)
+		if err != nil {
+			logger.Fatal("Failed to create local Parquet repo", zap.Error(err))
+		}
+		logger.Info("Using local Parquet repo",
+			zap.String("dir", config.DataDir),
+			zap.String("prefix", config.ParquetPrefix),
+		)
+	} else {
+		parquetRepo, err = parquet.NewRepo(ctx, config.ParquetBucket, config.ParquetPrefix)
+		if err != nil {
+			logger.Fatal("Failed to create Parquet repo", zap.Error(err))
+		}
 	}
 
 	sqlitePath := config.DataDir + "/ecfr.db"
 	logger.Info("Initializing storage adapters", zap.String("sqlite_path", sqlitePath))
-	sqliteRepo := sqlite.NewRepo(sqlitePath)
+	sqliteRepo, err := sqlite.NewRepo(sqlitePath)
+	if err != nil {
+		logger.Fatal("Failed to initialize SQLite repo", zap.String("path", sqlitePath), zap.Error(err))
+	}
 
 	ecfrClient := ecfr.NewClient()
 	
@@ -161,18 +186,22 @@ func main() {
 				}
 			}
 
-			// Step 5: Summaries (Transform)
-			logger.Info("Generating summaries", zap.Int("sections", len(sections)))
-			summaries, err := summariesUseCase.GenerateForTitle(ctx, t, sections)
-			if err != nil {
-				logger.Error("Summaries generate failed", zap.String("title", t.Title), zap.Error(err))
-			} else {
-				logger.Info("Generated summaries", zap.Int("count", len(summaries)))
-				// Thread-safe aggregation
-				summariesMutex.Lock()
-				allSummaries = append(allSummaries, summaries...)
-				summariesMutex.Unlock()
-			}
+	// Step 5: Summaries (Transform)
+	if !*skipSummary {
+		logger.Info("Generating title summary", zap.String("title", t.Title))
+		summaries, err := summariesUseCase.GenerateForTitle(ctx, t, sections)
+		if err != nil {
+			logger.Error("Summaries generate failed", zap.String("title", t.Title), zap.Error(err))
+		} else {
+			logger.Info("Generated summary", zap.Int("count", len(summaries)))
+			// Thread-safe aggregation
+			summariesMutex.Lock()
+			allSummaries = append(allSummaries, summaries...)
+			summariesMutex.Unlock()
+		}
+	} else {
+		logger.Info("Skipping summary generation", zap.String("title", t.Title))
+	}
 
 			logger.Info("Completed title",
 				zap.String("title", t.Title),

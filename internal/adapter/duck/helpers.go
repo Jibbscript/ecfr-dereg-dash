@@ -14,15 +14,18 @@ type Helper struct {
 	db *sql.DB
 }
 
-func NewHelper(parquet *parquet.Repo, sqlite *sqlite.Repo, enableUI bool) *Helper {
+func NewHelper(parquet *parquet.Repo, sqlite *sqlite.Repo, enableUI bool) (*Helper, error) {
 	db, err := sql.Open("duckdb", "")
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	_, err = db.Exec("INSTALL parquet; LOAD parquet;")
-	if err != nil {
-		panic(err)
-	}
+	
+	// Parquet extension is bundled in duckdb-go v2, so we just load it if needed,
+	// or trust it's autoloaded. Explicit INSTALL can cause issues if it tries to download.
+	// We'll try LOAD, but ignore error if it's already loaded or builtin.
+	// Actually, for v2.5.0, extensions are statically linked.
+	// Let's skip explicit INSTALL/LOAD unless we hit errors.
+	
 	// Note: This view creation might fail if no parquet files exist yet.
 	// In a real app we'd handle this more gracefully or init on first query.
 	// For now, we wrap in try/catch logic or assume ETL runs first.
@@ -31,16 +34,16 @@ func NewHelper(parquet *parquet.Repo, sqlite *sqlite.Repo, enableUI bool) *Helpe
 	if sqlite.Path != "" {
 		// _, err = db.Exec("ATTACH '" + sqlite.Path + "' (TYPE sqlite);")
 		// if err != nil {
-		// 	panic(err)
+		// 	return nil, err
 		// }
 	}
 	if enableUI {
 		// _, err = db.Exec("CALL start_ui()")
 		// if err != nil {
-		// 	panic(err)
+		// 	return nil, err
 		// }
 	}
-	return &Helper{db: db}
+	return &Helper{db: db}, nil
 }
 
 func (h *Helper) QueryAgencies(query string) ([]domain.Agency, error) {

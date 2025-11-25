@@ -33,7 +33,7 @@ func LoadConfig() Config {
 		DataDir:         getEnv("DATA_DIR", "data"),
 		VertexProjectID: os.Getenv("VERTEX_PROJECT_ID"),
 		VertexLocation:  getEnv("VERTEX_LOCATION", "us-central1"),
-		VertexModelID:   getEnv("VERTEX_MODEL_ID", "gemini-2.5-flash"),
+		VertexModelID:   getEnv("VERTEX_MODEL_ID", "gemini-2.5-pro"),
 		GCSBucket:       getEnv("GCS_BUCKET", "ecfr-dereg-dash-batch"),
 		DuckDBUI:        os.Getenv("DUCKDB_UI") == "1",
 

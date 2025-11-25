@@ -1,7 +1,10 @@
 FROM node:20-alpine
 WORKDIR /app/web
-COPY web/package.json web/yarn.lock ./
-RUN yarn install
+COPY web/package.json web/package-lock.json ./
+RUN npm install
 COPY web/ .
-RUN yarn build
-CMD ["yarn", "preview"]
+ARG API_BASE_URL
+ENV API_BASE_URL=$API_BASE_URL
+RUN npm run build
+ENV PORT=8080
+CMD ["node", ".output/server/index.mjs"]

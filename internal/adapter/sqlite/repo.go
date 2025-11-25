@@ -16,13 +16,13 @@ type Repo struct {
 	db   *sql.DB
 }
 
-func NewRepo(path string) *Repo {
+func NewRepo(path string) (*Repo, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		panic(err)
+		return nil, err
 	}
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS sections (
@@ -45,9 +45,10 @@ func NewRepo(path string) *Repo {
 		)
 	`)
 	if err != nil {
-		panic(err)
+		db.Close()
+		return nil, err
 	}
-	return &Repo{Path: path, db: db}
+	return &Repo{Path: path, db: db}, nil
 }
 
 func (r *Repo) InsertSections(sections []domain.Section) error {

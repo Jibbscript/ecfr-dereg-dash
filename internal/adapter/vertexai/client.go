@@ -239,6 +239,9 @@ func (c *Client) uploadBatchInput(ctx context.Context, prompts []string, fileNam
 func (c *Client) submitBatchJob(ctx context.Context, inputURI, outputPrefix, uniqueID string) (string, error) {
 	// NOTE: Model resource name for publisher models must be fully qualified:
 	// projects/{project}/locations/{location}/publishers/google/models/{model}
+	// Ensure modelID is correct for gemini-3-pro, if passed explicitly. 
+	// If c.modelID is just "gemini-3-pro", we use it.
+	// We might want to update config to "gemini-3-pro" but for now, we rely on c.modelID being set correctly.
 	modelName := fmt.Sprintf("publishers/google/models/%s", c.modelID)
 
 	req := &aiplatformpb.CreateBatchPredictionJobRequest{

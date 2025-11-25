@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,6 +20,9 @@ type Repo struct {
 	client     *storage.Client
 	bucketName string
 	rootPrefix string
+	
+	// Local mode
+	localDir string // if non-empty, use filesystem backend
 }
 
 func NewRepo(ctx context.Context, bucketName, rootPrefix string) (*Repo, error) {
@@ -28,6 +33,17 @@ func NewRepo(ctx context.Context, bucketName, rootPrefix string) (*Repo, error) 
 	return &Repo{
 		client:     c,
 		bucketName: bucketName,
+		rootPrefix: rootPrefix,
+	}, nil
+}
+
+func NewLocalRepo(rootDir, rootPrefix string) (*Repo, error) {
+	// Ensure base directory exists
+	if err := os.MkdirAll(filepath.Join(rootDir, rootPrefix), 0o755); err != nil {
+		return nil, err
+	}
+	return &Repo{
+		localDir:   rootDir,
 		rootPrefix: rootPrefix,
 	}, nil
 }
@@ -45,7 +61,41 @@ func (r *Repo) objectPath(parts ...string) string {
 	return p
 }
 
+func (r *Repo) localPath(parts ...string) string {
+	// <localDir>/<rootPrefix>/<snapshot>/<file>
+	rel := r.objectPath(parts...)
+	if r.localDir == "" {
+		return rel
+	}
+	return filepath.Join(r.localDir, rel)
+}
+
+func (r *Repo) isLocal() bool {
+	return r.localDir != ""
+}
+
 func (r *Repo) WriteSections(ctx context.Context, snapshot, title string, sections []domain.Section) error {
+	if r.isLocal() {
+		path := r.localPath(snapshot, title+".parquet")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		f, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		writer := parquet.NewGenericWriter[domain.Section](f)
+		if _, err := writer.Write(sections); err != nil {
+			return err
+		}
+		if err := writer.Close(); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	path := r.objectPath(snapshot, title+".parquet")
 	w := r.client.Bucket(r.bucketName).Object(path).NewWriter(ctx)
 	defer w.Close()
@@ -61,29 +111,66 @@ func (r *Repo) WriteSections(ctx context.Context, snapshot, title string, sectio
 }
 
 func (r *Repo) ReadSections(ctx context.Context, snapshot, title string) ([]domain.Section, error) {
-	path := r.objectPath(snapshot, title+".parquet")
-	obj := r.client.Bucket(r.bucketName).Object(path)
+	var reader io.Reader
 
-	rc, err := obj.NewReader(ctx)
-	if err != nil {
-		return nil, err
+	if r.isLocal() {
+		path := r.localPath(snapshot, title+".parquet")
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		reader = f
+	} else {
+		path := r.objectPath(snapshot, title+".parquet")
+		obj := r.client.Bucket(r.bucketName).Object(path)
+
+		rc, err := obj.NewReader(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer rc.Close()
+		reader = rc
 	}
-	defer rc.Close()
 
 	// parquet.NewGenericReader needs io.ReaderAt; buffer entire object in memory.
-	buf, err := io.ReadAll(rc)
+	buf, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, err
 	}
-	reader := parquet.NewGenericReader[domain.Section](bytes.NewReader(buf))
-	defer reader.Close()
+	pr := parquet.NewGenericReader[domain.Section](bytes.NewReader(buf))
+	defer pr.Close()
 
-	rows := make([]domain.Section, reader.NumRows())
-	_, err = reader.Read(rows)
+	rows := make([]domain.Section, pr.NumRows())
+	_, err = pr.Read(rows)
 	return rows, err
 }
 
 func (r *Repo) GetLatestSnapshot(ctx context.Context) (time.Time, error) {
+	if r.isLocal() {
+		base := filepath.Join(r.localDir, r.rootPrefix)
+		entries, err := os.ReadDir(base)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return time.Time{}, nil
+			}
+			return time.Time{}, err
+		}
+
+		var maxTime time.Time
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name := e.Name() // expect "YYYY-MM-DD"
+			t, err := time.Parse("2006-01-02", name)
+			if err == nil && t.After(maxTime) {
+				maxTime = t
+			}
+		}
+		return maxTime, nil
+	}
+
 	// List "directories" under rootPrefix by using Delimiter="/"
 	it := r.client.Bucket(r.bucketName).Objects(ctx, &storage.Query{
 		Prefix:    r.rootPrefix + "/",
@@ -114,34 +201,58 @@ func (r *Repo) GetLatestSnapshot(ctx context.Context) (time.Time, error) {
 }
 
 func (r *Repo) GetPrevSnapshot(ctx context.Context, snapshot string) (string, error) {
-	it := r.client.Bucket(r.bucketName).Objects(ctx, &storage.Query{
-		Prefix:    r.rootPrefix + "/",
-		Delimiter: "/",
-	})
-
 	currentTime, err := time.Parse("2006-01-02", snapshot)
 	if err != nil {
 		return "", err
 	}
 
 	var prevDate time.Time
-	for {
-		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
+
+	if r.isLocal() {
+		base := filepath.Join(r.localDir, r.rootPrefix)
+		entries, err := os.ReadDir(base)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return "", nil
+			}
 			return "", err
 		}
-		if attrs.Prefix != "" {
-			snap := strings.TrimPrefix(attrs.Prefix, r.rootPrefix+"/")
-			snap = strings.TrimSuffix(snap, "/")
-			t, err := time.Parse("2006-01-02", snap)
+
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			t, err := time.Parse("2006-01-02", name)
 			if err == nil && t.Before(currentTime) && t.After(prevDate) {
 				prevDate = t
 			}
 		}
+	} else {
+		it := r.client.Bucket(r.bucketName).Objects(ctx, &storage.Query{
+			Prefix:    r.rootPrefix + "/",
+			Delimiter: "/",
+		})
+
+		for {
+			attrs, err := it.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return "", err
+			}
+			if attrs.Prefix != "" {
+				snap := strings.TrimPrefix(attrs.Prefix, r.rootPrefix+"/")
+				snap = strings.TrimSuffix(snap, "/")
+				t, err := time.Parse("2006-01-02", snap)
+				if err == nil && t.Before(currentTime) && t.After(prevDate) {
+					prevDate = t
+				}
+			}
+		}
 	}
+
 	if prevDate.IsZero() {
 		// Return empty if no previous snapshot found, caller handles it
 		return "", nil 
@@ -150,6 +261,27 @@ func (r *Repo) GetPrevSnapshot(ctx context.Context, snapshot string) (string, er
 }
 
 func (r *Repo) WriteDiffs(ctx context.Context, snapshot, title string, diffs []domain.Diff) error {
+	if r.isLocal() {
+		path := r.localPath(snapshot, title+"_diffs.parquet")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		f, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		writer := parquet.NewGenericWriter[domain.Diff](f)
+		if _, err := writer.Write(diffs); err != nil {
+			return err
+		}
+		if err := writer.Close(); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	path := r.objectPath(snapshot, title+"_diffs.parquet")
 	w := r.client.Bucket(r.bucketName).Object(path).NewWriter(ctx)
 	defer w.Close()
@@ -170,6 +302,27 @@ func (r *Repo) WriteLSA(ctx context.Context, snapshot, title string, lsa domain.
 }
 
 func (r *Repo) WriteSummaries(ctx context.Context, snapshot string, summaries []domain.Summary) error {
+	if r.isLocal() {
+		path := r.localPath(snapshot, "summaries.parquet")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		f, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		writer := parquet.NewGenericWriter[domain.Summary](f)
+		if _, err := writer.Write(summaries); err != nil {
+			return err
+		}
+		if err := writer.Close(); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	path := r.objectPath(snapshot, "summaries.parquet")
 	w := r.client.Bucket(r.bucketName).Object(path).NewWriter(ctx)
 	defer w.Close()

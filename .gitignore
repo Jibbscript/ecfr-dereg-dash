@@ -10,8 +10,6 @@ testdata/
 vendor/
 
 # Build artifacts (binaries)
-api
-etl
 
 # Environment and OS
 .DS_Store

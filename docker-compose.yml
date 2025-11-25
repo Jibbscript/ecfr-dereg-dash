@@ -7,16 +7,24 @@ services:
     ports:
       - "8080:8080"
       - "4213:4213"
+    environment:
+      - ENV=local
+      - DATA_DIR=/app/data
+      - PARQUET_PREFIX=parquet
     volumes:
-      - ./data:/data
+      - ./data:/app/data
     env_file:
       - .env
   etl:
     build:
       context: .
       dockerfile: Dockerfile.etl
+    environment:
+      - ENV=local
+      - DATA_DIR=/app/data
+      - PARQUET_PREFIX=parquet
     volumes:
-      - ./data:/data
+      - ./data:/app/data
     env_file:
       - .env
     depends_on:
@@ -25,7 +33,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+      args:
+        API_BASE_URL: http://api:8080
     ports:
-      - "3000:3000"
+      - "3000:8080"
     depends_on:
       - api

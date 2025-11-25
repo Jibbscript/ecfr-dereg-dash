@@ -1,0 +1,12 @@
+.git
+.gitignore
+.DS_Store
+node_modules
+web/node_modules
+data/raw
+*.log
+bin/
+tmp/
+agent-plans/
+.amp/
+tests/

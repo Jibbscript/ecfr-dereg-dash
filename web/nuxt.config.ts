@@ -15,7 +15,7 @@ export default defineNuxtConfig({
       crawlLinks: true
     },
     routeRules: {
-      '/api/**': { proxy: 'http://localhost:8080/api/**' }
+      '/api/**': { proxy: `${process.env.API_BASE_URL || 'http://localhost:8080'}/api/**` }
     }
   },
   vite: {

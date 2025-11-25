@@ -26,22 +26,52 @@ func main() {
 
 	ctx := context.Background()
 
-	parquetRepo, err := parquet.NewRepo(ctx, config.ParquetBucket, config.ParquetPrefix)
-	if err != nil {
-		logger.Fatal("Failed to create Parquet repo", zap.Error(err))
+	var parquetRepo *parquet.Repo
+	var err error
+
+	// GCS backend (prod/staging)
+	if config.Env == "local" || config.Env == "dev" {
+		// Local filesystem backend
+		parquetRepo, err = parquet.NewLocalRepo(config.DataDir, config.ParquetPrefix)
+		if err != nil {
+			logger.Fatal("Failed to create local Parquet repo", zap.Error(err))
+		}
+		logger.Info("Using local Parquet repo",
+			zap.String("dir", config.DataDir),
+			zap.String("prefix", config.ParquetPrefix),
+		)
+	} else {
+		// GCS backend (prod/staging)
+		parquetRepo, err = parquet.NewRepo(ctx, config.ParquetBucket, config.ParquetPrefix)
+		if err != nil {
+			logger.Fatal("Failed to create Parquet repo", zap.Error(err))
+		}
 	}
 
-	sqliteRepo := sqlite.NewRepo(config.DataDir + "/ecfr.db")
-	duckHelper := duck.NewHelper(parquetRepo, sqliteRepo, config.DuckDBUI)
+	sqliteRepo, err := sqlite.NewRepo(config.DataDir + "/ecfr.db")
+	if err != nil {
+		logger.Fatal("Failed to create SQLite repo", zap.Error(err))
+	}
+
+	duckHelper, err := duck.NewHelper(parquetRepo, sqliteRepo, config.DuckDBUI)
+	if err != nil {
+		logger.Fatal("Failed to create DuckDB helper", zap.Error(err))
+	}
 
 	ecfrClient := ecfr.NewClient() // Still kept for LSA if needed, or remove if unused
-	govinfoClient, err := govinfo.NewClient(ctx, config.RawXMLBucket, config.RawXMLPrefix)
-	if err != nil {
-		logger.Fatal("Failed to create GovInfo client", zap.Error(err))
+	var govinfoClient *govinfo.Client
+	if config.Env == "local" || config.Env == "dev" {
+		logger.Warn("Skipping GovInfo Client initialization (local mode)")
+		// Ideally mock this if needed, or ensure it's not used for read-only flows
+	} else {
+		govinfoClient, err = govinfo.NewClient(ctx, config.RawXMLBucket, config.RawXMLPrefix)
+		if err != nil {
+			logger.Fatal("Failed to create GovInfo client", zap.Error(err))
+		}
 	}
 
 	var vertexClient *vertexai.Client
-	if os.Getenv("SKIP_VERTEX") == "true" {
+	if os.Getenv("SKIP_VERTEX") == "true" || config.Env == "local" || config.Env == "dev" {
 		logger.Warn("Skipping Vertex Client initialization (using mock)")
 		vertexClient = vertexai.NewMockClient()
 	} else {
@@ -66,9 +96,16 @@ func main() {
 		delivery.SetupHandlers(r, usecases, logger)
 	})
 
-	httpAddr := ":8080"
+	httpAddr := ":" + getEnv("PORT", "8080")
 	logger.Info("Starting API server", zap.String("addr", httpAddr))
 	if err := http.ListenAndServe(httpAddr, r); err != nil {
 		logger.Fatal("Server failed", zap.Error(err))
 	}
+}
+
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
 }
