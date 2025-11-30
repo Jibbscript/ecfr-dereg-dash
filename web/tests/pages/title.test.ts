@@ -41,8 +41,12 @@ describe('TitlePage', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Word Count: 5000')
-    expect(wrapper.text()).toContain('RSCS: 12.5')
+    // Word count now displayed inside a summary box, allow formatted number
+    expect(wrapper.text()).toMatch(/5,?000/) // matches 5000 or 5,000
+    // RSCS value displayed with label "Avg. RSCS Score"
+    expect(wrapper.text()).toContain('Avg. RSCS')
+    expect(wrapper.text()).toContain('12.5')
+    // Summary text appears in accordion section
     expect(wrapper.text()).toContain('Title summary here')
   })
 

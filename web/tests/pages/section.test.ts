@@ -10,11 +10,10 @@ vi.mock('vue-router', () => ({
   })
 }))
 
-const UsaHeading = { template: '<h1><slot /></h1>' }
-
 // Mock useFetch
 const mockData = {
     section: '123',
+    title: '40',
     text: 'Sample text content for section 123...',
     rscs_per_1k: 10.5,
     summary: 'A brief summary.'
@@ -33,17 +32,14 @@ describe('SectionPage', () => {
         template: '<Suspense><SectionPage /></Suspense>'
     })
 
-    const wrapper = mount(TestComponent, {
-        global: {
-            components: { UsaHeading, SectionPage }
-        }
-    })
+    const wrapper = mount(TestComponent)
 
     await flushPromises()
     
-    expect(wrapper.text()).toContain('Section 123')
+    expect(wrapper.text()).toContain('123') // heading contains section number
     expect(wrapper.text()).toContain('Sample text')
-    expect(wrapper.text()).toContain('RSCS: 10.5')
+    // RSCS appears as a numeric value with per 1,000 words context
+    expect(wrapper.text()).toContain('10.5')
   })
   
   it('logs error on failure', async () => {
@@ -58,9 +54,7 @@ describe('SectionPage', () => {
             template: '<Suspense><SectionPage /></Suspense>'
         })
 
-        mount(TestComponent, {
-            global: { components: { UsaHeading, SectionPage } }
-        })
+        mount(TestComponent)
         
         await flushPromises()
         

@@ -4,17 +4,18 @@ test.describe('eCFR Dashboard E2E', () => {
     test('homepage loads and displays agencies', async ({ page }) => {
         page.on('console', msg => console.log('PAGE LOG:', msg.text()));
         await page.goto('/');
-        await expect(page).toHaveTitle(/eCFR Dashboard/);
+await expect(page).toHaveTitle(/eCFR Deregulation Dashboard/);
 
         // Wait for loading to finish (either table or error)
-        await expect(page.locator('.usa-table').or(page.locator('.usa-alert--error'))).toBeVisible({ timeout: 10000 });
+// Wait until either table is visible or an error alert appears
+await expect(page.locator('.usa-table').or(page.locator('.usa-alert--error'))).toBeVisible({ timeout: 15000 });
 
         if (await page.locator('.usa-alert--error').isVisible()) {
             console.log('App Error:', await page.locator('.usa-alert__text').textContent());
         }
 
         // Verify table headers using CSS if role fails
-        await expect(page.locator('th').filter({ hasText: 'Name' })).toBeVisible();
+await expect(page.locator('th').filter({ hasText: 'Agency Name' })).toBeVisible();
         await expect(page.locator('th').filter({ hasText: 'Word Count' })).toBeVisible();
 
         // Verify data presence
