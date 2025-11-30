@@ -68,10 +68,24 @@ func main() {
 		logger.Fatal("Failed to initialize SQLite repo", zap.String("path", sqlitePath), zap.Error(err))
 	}
 
+	// Ingest agency data from JSON (refreshes every ETL run)
+	agenciesPath := "ecfr_agencies.json"
+	logger.Info("Ingesting agency data", zap.String("path", agenciesPath))
+	if err := sqliteRepo.IngestAgencies(agenciesPath); err != nil {
+		logger.Warn("Agency ingestion failed (continuing without agency mapping)", zap.Error(err))
+	} else {
+		logger.Info("Agency data ingested successfully")
+	}
+
 	ecfrClient := ecfr.NewClient()
 	
 	govinfoClient, err := govinfo.NewClient(ctx, config.RawXMLBucket, config.RawXMLPrefix)
 	if err != nil {
+		if config.Env == "local" {
+			logger.Warn("Failed to create GovInfo client (skipping ETL steps that require it)", zap.Error(err))
+			logger.Info("ETL Agency Ingestion Completed (Local Mode)")
+			return
+		}
 		logger.Fatal("Failed to create GovInfo client", zap.Error(err))
 	}
 
@@ -181,8 +195,13 @@ func main() {
 			if err != nil {
 				logger.Error("LSA collect failed", zap.String("title", t.Title), zap.Error(err))
 			} else {
+				// Write to SQLite (for API queries)
+				if err := sqliteRepo.InsertLSA(lsaCounts, snapshotDate); err != nil {
+					logger.Error("LSA SQLite write failed", zap.String("title", t.Title), zap.Error(err))
+				}
+				// Write to Parquet (for analytics)
 				if err := parquetRepo.WriteLSA(ctx, snapshotDate, t.Title, lsaCounts); err != nil {
-					logger.Error("LSA write failed", zap.String("title", t.Title), zap.Error(err))
+					logger.Error("LSA Parquet write failed", zap.String("title", t.Title), zap.Error(err))
 				}
 			}
 

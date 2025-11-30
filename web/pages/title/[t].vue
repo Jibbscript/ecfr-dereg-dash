@@ -1,5 +1,5 @@
 <template>
-  <UsaAccordion>
+  <UsaAccordion v-if="title">
     <UsaAccordionItem title="Metrics">
       <p>Word Count: {{ title.total_words }}</p>
       <p>RSCS: {{ title.avg_rscs }}</p>
@@ -11,6 +11,12 @@
       {{ title.summary }}
     </UsaAccordionItem>
   </UsaAccordion>
+  <div v-else-if="error">
+    Error loading title.
+  </div>
+  <div v-else>
+    Loading...
+  </div>
 </template>
 
 <script setup>

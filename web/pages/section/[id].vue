@@ -1,9 +1,15 @@
 <template>
-  <div>
+  <div v-if="section">
     <UsaHeading>Section {{ section.section }}</UsaHeading>
     <p>Excerpt: {{ section.text ? section.text.substring(0, 500) : '' }}...</p>
     <p>RSCS: {{ section.rscs_per_1k }}</p>
     <p>Summary: {{ section.summary }}</p>
+  </div>
+  <div v-else-if="error">
+    Error loading section.
+  </div>
+  <div v-else>
+    Loading...
   </div>
 </template>
 

@@ -296,9 +296,61 @@ func (r *Repo) WriteDiffs(ctx context.Context, snapshot, title string, diffs []d
 	return w.Close()
 }
 
+// LSARecord is a parquet-compatible representation of LSA activity
+type LSARecord struct {
+	Title      string    `parquet:"title"`
+	Snapshot   string    `parquet:"snapshot_date"`
+	Proposals  int       `parquet:"proposals"`
+	Amendments int       `parquet:"amendments"`
+	Finals     int       `parquet:"finals"`
+	CapturedAt time.Time `parquet:"captured_at"`
+	SourceHint string    `parquet:"source_hint"`
+}
+
 func (r *Repo) WriteLSA(ctx context.Context, snapshot, title string, lsa domain.LSAActivity) error {
-	// Implementation for LSA writing
-	return nil
+	record := LSARecord{
+		Title:      title,
+		Snapshot:   snapshot,
+		Proposals:  lsa.ProposalsCount,
+		Amendments: lsa.AmendmentsCount,
+		Finals:     lsa.FinalsCount,
+		CapturedAt: lsa.CapturedAt,
+		SourceHint: lsa.SourceHint,
+	}
+
+	if r.isLocal() {
+		path := r.localPath(snapshot, title+"_lsa.parquet")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		f, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		writer := parquet.NewGenericWriter[LSARecord](f)
+		if _, err := writer.Write([]LSARecord{record}); err != nil {
+			return err
+		}
+		if err := writer.Close(); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	path := r.objectPath(snapshot, title+"_lsa.parquet")
+	w := r.client.Bucket(r.bucketName).Object(path).NewWriter(ctx)
+	defer w.Close()
+
+	writer := parquet.NewGenericWriter[LSARecord](w)
+	if _, err := writer.Write([]LSARecord{record}); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	return w.Close()
 }
 
 func (r *Repo) WriteSummaries(ctx context.Context, snapshot string, summaries []domain.Summary) error {

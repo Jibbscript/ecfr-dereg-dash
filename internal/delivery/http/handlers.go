@@ -18,12 +18,37 @@ type Usecases struct {
 
 func SetupHandlers(r chi.Router, usecases Usecases, logger *zap.Logger) {
 	r.Get("/agencies", func(w http.ResponseWriter, req *http.Request) {
-		agencies, err := usecases.Metrics.GetAgencyTotals()
+		// Parse optional title filter from query params
+		titleFilter := req.URL.Query().Get("title")
+		var tf *string
+		if titleFilter != "" {
+			tf = &titleFilter
+		}
+
+		// Check if checksums are requested
+		includeChecksum := req.URL.Query().Get("include_checksum") == "true"
+
+		agencies, err := usecases.Metrics.GetAgencyTotals(tf)
 		if err != nil {
 			logger.Error("Get agencies failed", zap.Error(err))
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
 		}
+
+		// Populate checksums if requested
+		if includeChecksum {
+			for i := range agencies {
+				checksum, err := usecases.Metrics.GetAgencyChecksum(agencies[i].ID)
+				if err != nil {
+					logger.Warn("Failed to get checksum for agency",
+						zap.String("agency_id", agencies[i].ID),
+						zap.Error(err))
+					continue
+				}
+				agencies[i].ContentChecksum = checksum
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(agencies); err != nil {
 			logger.Error("Failed to encode response", zap.Error(err))

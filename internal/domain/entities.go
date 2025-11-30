@@ -8,11 +8,13 @@ type Agency struct {
 }
 
 type AgencyMetric struct {
-	ID         string  `json:"id"`
-	Name       string  `json:"name"`
-	TotalWords int     `json:"total_words"`
-	AvgRSCS    float64 `json:"avg_rscs"`
-	LSACounts  int     `json:"lsa_counts"`
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	ParentID        *string `json:"parent_id"`
+	TotalWords      int     `json:"total_words"`
+	AvgRSCS         float64 `json:"avg_rscs"`
+	LSACounts       int     `json:"lsa_counts"`
+	ContentChecksum string  `json:"content_checksum,omitempty"`
 }
 
 type Title struct {
