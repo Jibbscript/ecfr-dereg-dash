@@ -8,29 +8,42 @@
 
     <!-- Site Header -->
     <UsaHeader>
-      <template #logo>
-        <div class="usa-logo" id="extended-logo">
+      <UsaLogo>
+        <template #default>
           <em class="usa-logo__text">
             <NuxtLink to="/" title="Home" aria-label="Home">
               eCFR Deregulation Dashboard
             </NuxtLink>
           </em>
-        </div>
-      </template>
+        </template>
+      </UsaLogo>
 
-      <template #primary-navigation>
-        <UsaNavPrimary :items="navItems" />
-      </template>
-
-      <template #secondary-navigation>
-        <UsaSearch size="small" label="Search" @submit="handleSearch" />
-      </template>
+      <UsaNav>
+        <template #primary>
+          <UsaNavPrimary :items="navItems" />
+        </template>
+        <template #secondary>
+          <button
+            id="about-rscs-trigger"
+            type="button"
+            class="usa-button usa-button--outline"
+            @click.prevent="explainer.open($event && $event.currentTarget)"
+            aria-haspopup="dialog"
+            aria-controls="rscs-explainer"
+          >
+            About RSCS
+          </button>
+        </template>
+      </UsaNav>
     </UsaHeader>
 
     <!-- Main Content Area -->
     <main id="main-content" class="main-content">
       <slot />
     </main>
+
+    <!-- Global RSCS Explainer Modal -->
+    <RscsExplainer id="rscs-explainer" v-model:visible="explainer.visible.value" />
 
     <!-- Site Footer -->
     <UsaFooter variant="big">
@@ -92,22 +105,30 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import RscsExplainer from '../components/RscsExplainer.vue'
+import { provideRscsExplainer } from '../composables/useRscsExplainer'
 
-const router = useRouter()
+const route = useRoute()
+const explainer = provideRscsExplainer()
 
+// UsaNav items - Dashboard link only; About RSCS is a separate button
 const navItems = ref([
   {
     text: 'Dashboard',
     href: '/',
   },
-  {
-    text: 'About RSCS',
-    href: '#',
-    id: 'about-rscs-trigger',
-  },
 ])
+
+// Support deep-linking with ?rscs=1
+watch(
+  () => route.query.rscs,
+  (val) => {
+    if (val === '1' || val === 'true') explainer.open()
+  },
+  { immediate: true }
+)
 
 const identifierLinks = ref([
   {
@@ -123,11 +144,6 @@ const identifierLinks = ref([
     href: '#',
   },
 ])
-
-function handleSearch(searchTerm) {
-  console.log('Search:', searchTerm)
-  // Future: implement search functionality
-}
 </script>
 
 <style scoped>

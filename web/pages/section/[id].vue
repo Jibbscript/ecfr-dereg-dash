@@ -41,7 +41,7 @@
                 type="button"
                 class="usa-button--unstyled info-icon"
                 aria-label="Information about RSCS metric"
-                @click="showRscsModal = true"
+@click="explainer.open($event && $event.currentTarget)"
               >
                 ⓘ
               </button>
@@ -154,16 +154,17 @@
     </template>
 
     <!-- RSCS Explainer Modal -->
-    <RscsExplainer :visible="showRscsModal" @close="showRscsModal = false" />
+<!-- RSCS Explainer handled globally by layout -->
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useRscsExplainer } from '../../composables/useRscsExplainer'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
-const showRscsModal = ref(false)
+const explainer = useRscsExplainer()
 
 const { data: section, pending, error } = await useFetch(`/api/sections/${route.params.id}`)
 

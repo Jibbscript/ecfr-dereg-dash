@@ -12,7 +12,7 @@
             Explore and analyze the complexity of federal regulations across all agencies. 
             Track regulatory burden using the RSCS metric and identify opportunities for simplification.
           </p>
-          <UsaButton variant="secondary" @click="showRscsModal = true">
+<UsaButton variant="secondary" @click="explainer.open($event && $event.currentTarget)">
             Learn about RSCS
           </UsaButton>
         </div>
@@ -43,7 +43,7 @@
             format="decimal"
             description="Per 1,000 words"
             :has-info="true"
-            @info-click="showRscsModal = true"
+@info-click="explainer.open($event && $event.currentTarget)"
           />
         </div>
         <div class="tablet:grid-col-3">
@@ -56,8 +56,7 @@
       </div>
     </section>
 
-    <!-- RSCS Explainer Modal -->
-    <RscsExplainer :visible="showRscsModal" @close="showRscsModal = false" />
+    <!-- RSCS Explainer Modal now provided globally in layout -->
 
     <!-- Data Section -->
     <section class="grid-container margin-top-4" aria-label="Agency data">
@@ -131,25 +130,30 @@
                 </button>
               </th>
               <th scope="col">
-                <button
-                  type="button"
-                  class="usa-button--unstyled sortable-header"
-                  @click="sortBy('avg_rscs')"
-                  :aria-sort="sortKey === 'avg_rscs' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'"
-                >
-                  RSCS per 1K
+                <div class="th-header-group">
+                  <button
+                    type="button"
+                    class="usa-button--unstyled sortable-header"
+                    @click="sortBy('avg_rscs')"
+                    :aria-sort="sortKey === 'avg_rscs' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'"
+                    aria-label="Sort by RSCS per 1K"
+                  >
+                    RSCS per 1K
+                    <span class="sort-indicator" v-if="sortKey === 'avg_rscs'">
+                      {{ sortDir === 'asc' ? '▲' : '▼' }}
+                    </span>
+                  </button>
                   <button
                     type="button"
                     class="usa-button--unstyled info-icon"
-                    aria-label="Information about RSCS metric"
-                    @click.stop="showRscsModal = true"
+                    aria-label="Open RSCS explanation"
+                    aria-haspopup="dialog"
+                    aria-controls="rscs-explainer"
+@click.stop="explainer.open($event && $event.currentTarget)"
                   >
                     ⓘ
                   </button>
-                  <span class="sort-indicator" v-if="sortKey === 'avg_rscs'">
-                    {{ sortDir === 'asc' ? '▲' : '▼' }}
-                  </span>
-                </button>
+                </div>
               </th>
               <th scope="col">LSA Activity</th>
               <th v-if="includeChecksum" scope="col">Content Checksum</th>
@@ -222,6 +226,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRscsExplainer } from '../composables/useRscsExplainer'
 
 const selectedTitle = ref('')
 const includeChecksum = ref(false)
@@ -231,7 +236,7 @@ const error = ref(null)
 const expanded = ref({})
 const sortKey = ref('total_words')
 const sortDir = ref('desc')
-const showRscsModal = ref(false)
+const explainer = useRscsExplainer()
 
 // Truncate checksum for display (show first 8 chars)
 function truncateChecksum(hash) {
@@ -384,6 +389,12 @@ onMounted(fetchAgencies)
 .sort-indicator {
   font-size: 0.75rem;
   color: #005ea2;
+}
+
+.th-header-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .info-icon {

@@ -39,7 +39,6 @@ export default defineNuxtConfig({
   modules: ['nuxt-uswds'],
   nuxtUswds: {
     autoImportComponents: true,
-    componentPrefix: 'Usa',
   },
   devtools: { enabled: true },
   nitro: {

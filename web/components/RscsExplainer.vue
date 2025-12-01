@@ -1,14 +1,9 @@
 <template>
   <UsaModal
-    :visible="visible"
-    aria-labelledby="rscs-modal-heading"
+    v-model:visible="localVisible"
+    heading="Understanding the RSCS Metric"
     aria-describedby="rscs-modal-description"
-    @close="$emit('close')"
   >
-    <template #heading>
-      <h2 id="rscs-modal-heading">Understanding the RSCS Metric</h2>
-    </template>
-
     <div id="rscs-modal-description">
       <p class="usa-intro">
         The <strong>Regulatory Simplicity Complexity Score (RSCS)</strong> is a quantitative measure 
@@ -96,20 +91,31 @@
     </div>
 
     <template #footer>
-      <UsaButton @click="$emit('close')">Close</UsaButton>
+      <UsaButton @click="handleClose">Close</UsaButton>
     </template>
   </UsaModal>
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   visible: {
     type: Boolean,
     default: false,
   },
 })
 
-defineEmits(['close'])
+const emit = defineEmits(['update:visible'])
+
+const localVisible = computed({
+  get: () => props.visible,
+  set: (val) => emit('update:visible', val)
+})
+
+function handleClose() {
+  localVisible.value = false
+}
 </script>
 
 <style scoped>
