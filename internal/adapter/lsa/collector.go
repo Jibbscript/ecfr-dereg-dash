@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/ecfr"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/vertexai"
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/ecfr"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/vertexai"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 	"golang.org/x/net/html"
 )
 
@@ -66,23 +66,23 @@ func (c *Collector) CollectLSAData(ctx context.Context) error {
 	// Since parsing HTML accurately without a specific structure is hard, and we have Vertex AI,
 	// we could potentially use Vertex to extract structured data if we send the text.
 	// However, "Create a new download job... access and parse this data" implies we should try parsing.
-	
+
 	// For this implementation, I'll do a basic extraction.
 	// The ReaderAids page has a section "LIST OF CFR SECTIONS AFFECTED".
 	// It lists Titles and Parts.
 	// We will count occurrences of "Title XX" to estimate activity if exact parsing is complex.
 	// But let's try to populate lsaData map.
-	
+
 	// Reset cache
 	c.lsaData = make(map[string]domain.LSAActivity)
 
 	// Simplified parsing: Count mentions of "Title X" in the LSA section.
 	// In reality, we'd need a robust parser or LLM.
 	// Let's assume we count "Title \d+" pattern matches in the text content.
-	
+
 	// ... Parsing logic ... (Simplified for this step as full HTML parsing is involved)
 	// I'll implement a placeholder that scans for "Title [0-9]+" and counts them.
-	
+
 	tokenizer := html.NewTokenizer(resp.Body)
 	for {
 		tt := tokenizer.Next()
@@ -107,7 +107,7 @@ func (c *Collector) CollectLSAData(ctx context.Context) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 

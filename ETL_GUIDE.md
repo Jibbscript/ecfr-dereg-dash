@@ -27,7 +27,7 @@ This guide details how to run the initial ETL pipeline to ingest the complete eC
     # GCP Project ID for Vertex AI
     VERTEX_PROJECT_ID=your-gcp-project-id
     VERTEX_LOCATION=us-central1
-    VERTEX_MODEL_ID=gemini-1.5-pro-001 # or similar
+    VERTEX_MODEL_ID=gemini-2.5-pro # or similar
 
     # GCS Bucket for Parquet output
     GCS_BUCKET=your-gcs-bucket-name
@@ -35,8 +35,6 @@ This guide details how to run the initial ETL pipeline to ingest the complete eC
     # Local data directory for temporary files and SQLite DB
     DATA_DIR=./data
 
-    # (Optional) Anthropic Key if used elsewhere, but ETL uses Vertex
-    # ANTHROPIC_API_KEY=...
     ```
 
 ## Running the Pipeline

@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/platform"
 	"github.com/joho/godotenv"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/parquet"
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
-	"github.com/xai/ecfr-dereg-dashboard/internal/platform"
 	"go.uber.org/zap"
 	"google.golang.org/api/iterator"
 )

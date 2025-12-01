@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/govinfo"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/lsa"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/parquet"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/sqlite"
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/govinfo"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/lsa"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 	"go.uber.org/zap"
 )
 
@@ -72,7 +72,7 @@ func (u *Ingest) IngestTitle(ctx context.Context, title domain.Title) ([]domain.
 		// Or better: The previous implementation deleted local file.
 		// I'll just re-call download. But Download checks existence.
 		// I should probably rely on the error handling in Download.
-		
+
 		// Let's just fail for now as deleting GCS object adds complexity I didn't add to client.
 		return nil, err
 	}
@@ -83,19 +83,19 @@ func (u *Ingest) IngestTitle(ctx context.Context, title domain.Title) ([]domain.
 	sections := make([]domain.Section, numSections)
 
 	// Optimization: Worker pool for CPU-bound regex operations
-	// Use 2x logical cores for better saturation if some ops block slightly, 
+	// Use 2x logical cores for better saturation if some ops block slightly,
 	// though these are mostly pure CPU.
 	numWorkers := runtime.NumCPU()
 	sem := make(chan struct{}, numWorkers)
 	var wg sync.WaitGroup
-	
+
 	// Snapshot date is constant for the batch
 	snapshotDate := time.Now().Format("2006-01-02")
 
 	for i, raw := range rawSections {
 		wg.Add(1)
 		sem <- struct{}{} // Acquire token
-		
+
 		go func(idx int, raw domain.Section) {
 			defer wg.Done()
 			defer func() { <-sem }() // Release token

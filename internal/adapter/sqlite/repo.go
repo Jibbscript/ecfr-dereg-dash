@@ -10,7 +10,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 )
 
 type Repo struct {

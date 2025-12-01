@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/usecase"
 	"github.com/go-chi/chi/v5"
-	"github.com/xai/ecfr-dereg-dashboard/internal/usecase"
 	"go.uber.org/zap"
 )
 

@@ -13,7 +13,7 @@ import (
 	aiplatform "cloud.google.com/go/aiplatform/apiv1"
 	"cloud.google.com/go/aiplatform/apiv1/aiplatformpb"
 	"cloud.google.com/go/storage"
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/genai"
@@ -239,7 +239,7 @@ func (c *Client) uploadBatchInput(ctx context.Context, prompts []string, fileNam
 func (c *Client) submitBatchJob(ctx context.Context, inputURI, outputPrefix, uniqueID string) (string, error) {
 	// NOTE: Model resource name for publisher models must be fully qualified:
 	// projects/{project}/locations/{location}/publishers/google/models/{model}
-	// Ensure modelID is correct for gemini-3-pro, if passed explicitly. 
+	// Ensure modelID is correct for gemini-3-pro, if passed explicitly.
 	// If c.modelID is just "gemini-3-pro", we use it.
 	// We might want to update config to "gemini-3-pro" but for now, we rely on c.modelID being set correctly.
 	modelName := fmt.Sprintf("publishers/google/models/%s", c.modelID)
@@ -315,7 +315,7 @@ func (c *Client) downloadBatchResults(ctx context.Context, outputURI string, exp
 	// fmt.Printf("Listing objects in bucket: %s, prefix: %s\n", bucketName, prefix)
 
 	it := c.storageClient.Bucket(bucketName).Objects(ctx, &storage.Query{Prefix: prefix})
-	
+
 	var results []string
 
 	for {
@@ -346,13 +346,13 @@ func (c *Client) downloadBatchResults(ctx context.Context, outputURI string, exp
 				fmt.Printf("Error unmarshaling batch output line: %v\n", err)
 				continue
 			}
-			
+
 			if len(line.Status) > 0 && string(line.Status) != "{}" && string(line.Status) != "null" {
 				// Failed row
-				results = append(results, "") 
+				results = append(results, "")
 				continue
 			}
-			
+
 			if line.Response != nil {
 				text := line.Response.Text()
 				results = append(results, text)

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 )
 
 type Client struct {

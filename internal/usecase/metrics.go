@@ -1,9 +1,9 @@
 package usecase
 
 import (
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/duck"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/sqlite"
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/duck"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 )
 
 type Metrics struct {

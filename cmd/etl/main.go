@@ -8,16 +8,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/ecfr"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/govinfo"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/lsa"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/vertexai"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/platform"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/usecase"
 	"github.com/joho/godotenv"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/ecfr"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/govinfo"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/lsa"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/parquet"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/sqlite"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/vertexai"
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
-	"github.com/xai/ecfr-dereg-dashboard/internal/platform"
-	"github.com/xai/ecfr-dereg-dashboard/internal/usecase"
 	"go.uber.org/zap"
 )
 
@@ -28,7 +28,7 @@ func main() {
 	defer logger.Sync()
 
 	// Parse command line flags
-	skipSummary := flag.Bool("skip-summary", false, "Skip the summary generation step")
+	skipSummary := flag.Bool("skip-summary", true, "Skip the summary generation step")
 	flag.Parse()
 
 	logger.Info("Starting ETL Pipeline (Optimized)",
@@ -78,7 +78,7 @@ func main() {
 	}
 
 	ecfrClient := ecfr.NewClient()
-	
+
 	govinfoClient, err := govinfo.NewClient(ctx, config.RawXMLBucket, config.RawXMLPrefix)
 	if err != nil {
 		if config.Env == "local" {
@@ -94,7 +94,6 @@ func main() {
 		logger.Warn("Failed to create Vertex client, using mock", zap.Error(err))
 		vertexClient = vertexai.NewMockClient()
 	}
-
 
 	lsaCollector := lsa.NewCollector(ecfrClient, vertexClient)
 
@@ -132,7 +131,7 @@ func main() {
 	// --- OPTIMIZATION: Parallel Title Processing ---
 	// Limit concurrency to avoid FD exhaustion (e.g., 4 concurrent titles)
 	// While we have many cores, we don't want to hammer external APIs too hard
-	maxConcurrentTitles := 4 
+	maxConcurrentTitles := 4
 	sem := make(chan struct{}, maxConcurrentTitles)
 	var wg sync.WaitGroup
 
@@ -149,7 +148,7 @@ func main() {
 		go func(t domain.Title, idx int) {
 			defer wg.Done()
 			defer func() { <-sem }() // Release token
-			
+
 			titleStart := time.Now()
 			currentFileNum := idx + 1
 
@@ -205,22 +204,22 @@ func main() {
 				}
 			}
 
-	// Step 5: Summaries (Transform)
-	if !*skipSummary {
-		logger.Info("Generating title summary", zap.String("title", t.Title))
-		summaries, err := summariesUseCase.GenerateForTitle(ctx, t, sections)
-		if err != nil {
-			logger.Error("Summaries generate failed", zap.String("title", t.Title), zap.Error(err))
-		} else {
-			logger.Info("Generated summary", zap.Int("count", len(summaries)))
-			// Thread-safe aggregation
-			summariesMutex.Lock()
-			allSummaries = append(allSummaries, summaries...)
-			summariesMutex.Unlock()
-		}
-	} else {
-		logger.Info("Skipping summary generation", zap.String("title", t.Title))
-	}
+			// Step 5: Summaries (Transform)
+			if !*skipSummary {
+				logger.Info("Generating title summary", zap.String("title", t.Title))
+				summaries, err := summariesUseCase.GenerateForTitle(ctx, t, sections)
+				if err != nil {
+					logger.Error("Summaries generate failed", zap.String("title", t.Title), zap.Error(err))
+				} else {
+					logger.Info("Generated summary", zap.Int("count", len(summaries)))
+					// Thread-safe aggregation
+					summariesMutex.Lock()
+					allSummaries = append(allSummaries, summaries...)
+					summariesMutex.Unlock()
+				}
+			} else {
+				logger.Info("Skipping summary generation", zap.String("title", t.Title))
+			}
 
 			logger.Info("Completed title",
 				zap.String("title", t.Title),

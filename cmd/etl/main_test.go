@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 	"github.com/stretchr/testify/assert"
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
 	"go.uber.org/zap"
 )
 

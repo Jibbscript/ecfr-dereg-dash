@@ -79,7 +79,7 @@
               <h3 class="usa-footer__primary-link">Contact</h3>
               <ul class="usa-list usa-list--unstyled">
                 <li class="usa-footer__secondary-link">
-                  <a href="https://github.com/xai/ecfr-dereg-dashboard" target="_blank" rel="noopener">GitHub Repository</a>
+                  <a href="https://github.com/Jibbscript/ecfr-dereg-dashboard" target="_blank" rel="noopener">GitHub Repository</a>
                 </li>
               </ul>
             </div>

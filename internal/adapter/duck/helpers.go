@@ -5,9 +5,9 @@ import (
 
 	_ "github.com/duckdb/duckdb-go/v2"
 
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/parquet"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/sqlite"
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 )
 
 type Helper struct {
@@ -19,13 +19,13 @@ func NewHelper(parquet *parquet.Repo, sqlite *sqlite.Repo, enableUI bool) (*Help
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Parquet extension is bundled in duckdb-go v2, so we just load it if needed,
 	// or trust it's autoloaded. Explicit INSTALL can cause issues if it tries to download.
 	// We'll try LOAD, but ignore error if it's already loaded or builtin.
 	// Actually, for v2.5.0, extensions are statically linked.
 	// Let's skip explicit INSTALL/LOAD unless we hit errors.
-	
+
 	// Note: This view creation might fail if no parquet files exist yet.
 	// In a real app we'd handle this more gracefully or init on first query.
 	// For now, we wrap in try/catch logic or assume ETL runs first.

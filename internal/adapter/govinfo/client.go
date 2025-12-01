@@ -13,7 +13,7 @@ import (
 
 	"cloud.google.com/go/storage"
 
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 )
 
 type Client struct {
@@ -93,13 +93,13 @@ func (c *Client) DownloadTitleXML(ctx context.Context, title int) (string, error
 	if resp.StatusCode != http.StatusOK {
 		// Read body for error details
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		
+
 		// If 404, it might be a missing/reserved title (not all 1-50 exist).
 		// We return a specific error that the caller can check to skip gracefully.
 		if resp.StatusCode == http.StatusNotFound {
 			return "", domain.ErrNotFound
 		}
-		
+
 		return "", fmt.Errorf("failed to download XML from %s: status %s, body: %q", xmlLink, resp.Status, string(bodyBytes))
 	}
 

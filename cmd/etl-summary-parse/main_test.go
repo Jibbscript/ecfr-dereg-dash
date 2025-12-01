@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 	"github.com/stretchr/testify/assert"
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
 )
 
 func TestParseBatchOutputLine(t *testing.T) {

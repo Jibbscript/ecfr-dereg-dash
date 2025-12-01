@@ -13,14 +13,14 @@ import (
 	"github.com/parquet-go/parquet-go"
 	"google.golang.org/api/iterator"
 
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 )
 
 type Repo struct {
 	client     *storage.Client
 	bucketName string
 	rootPrefix string
-	
+
 	// Local mode
 	localDir string // if non-empty, use filesystem backend
 }
@@ -255,7 +255,7 @@ func (r *Repo) GetPrevSnapshot(ctx context.Context, snapshot string) (string, er
 
 	if prevDate.IsZero() {
 		// Return empty if no previous snapshot found, caller handles it
-		return "", nil 
+		return "", nil
 	}
 	return prevDate.Format("2006-01-02"), nil
 }

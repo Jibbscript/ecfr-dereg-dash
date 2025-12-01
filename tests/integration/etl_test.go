@@ -3,10 +3,10 @@ package integration_test
 import (
 	"testing"
 
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/parquet"
-	"github.com/xai/ecfr-dereg-dashboard/internal/adapter/sqlite"
-	"github.com/xai/ecfr-dereg-dashboard/internal/domain"
-	"github.com/xai/ecfr-dereg-dashboard/internal/usecase"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/usecase"
 	// Mocks would be needed here for external services
 )
 

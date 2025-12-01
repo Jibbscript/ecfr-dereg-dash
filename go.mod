@@ -1,4 +1,4 @@
-module github.com/xai/ecfr-dereg-dashboard
+module github.com/Jibbscript/ecfr-dereg-dashboard
 
 go 1.24.0
 
