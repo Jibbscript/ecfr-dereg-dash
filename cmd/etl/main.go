@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"runtime"
 	"sync"
@@ -27,15 +26,10 @@ func main() {
 	logger := platform.NewLogger(config.Env)
 	defer logger.Sync()
 
-	// Parse command line flags
-	skipSummary := flag.Bool("skip-summary", true, "Skip the summary generation step")
-	flag.Parse()
-
 	logger.Info("Starting ETL Pipeline (Optimized)",
 		zap.String("env", config.Env),
 		zap.String("data_dir", config.DataDir),
-		zap.Int("gomaxprocs", runtime.GOMAXPROCS(0)),
-		zap.Bool("skip_summary", *skipSummary))
+		zap.Int("gomaxprocs", runtime.GOMAXPROCS(0)))
 	pipelineStart := time.Now()
 
 	ctx := context.Background()
@@ -98,13 +92,12 @@ func main() {
 	lsaCollector := lsa.NewCollector(ecfrClient, vertexClient)
 
 	ingestUseCase := usecase.NewIngest(logger, govinfoClient, lsaCollector, parquetRepo, sqliteRepo)
-	summariesUseCase := usecase.NewSummaries(logger, vertexClient, parquetRepo)
 	snapshotUseCase := usecase.NewSnapshot(parquetRepo, sqliteRepo)
 
 	snapshotDate := time.Now().Format("2006-01-02")
 
 	// Step 1: Fetch title catalog
-	logger.Info("Step 1/5: Fetching changed titles (Extract)")
+	logger.Info("Step 1/4: Fetching changed titles (Extract)")
 	extractStart := time.Now()
 	changedTitles, err := ingestUseCase.FetchChangedTitles(ctx)
 	if err != nil {
@@ -134,10 +127,6 @@ func main() {
 	maxConcurrentTitles := 4
 	sem := make(chan struct{}, maxConcurrentTitles)
 	var wg sync.WaitGroup
-
-	// Mutex for collecting results that must be aggregated centrally
-	var summariesMutex sync.Mutex
-	allSummaries := []domain.Summary{}
 
 	totalTitles := len(changedTitles)
 
@@ -204,23 +193,6 @@ func main() {
 				}
 			}
 
-			// Step 5: Summaries (Transform)
-			if !*skipSummary {
-				logger.Info("Generating title summary", zap.String("title", t.Title))
-				summaries, err := summariesUseCase.GenerateForTitle(ctx, t, sections)
-				if err != nil {
-					logger.Error("Summaries generate failed", zap.String("title", t.Title), zap.Error(err))
-				} else {
-					logger.Info("Generated summary", zap.Int("count", len(summaries)))
-					// Thread-safe aggregation
-					summariesMutex.Lock()
-					allSummaries = append(allSummaries, summaries...)
-					summariesMutex.Unlock()
-				}
-			} else {
-				logger.Info("Skipping summary generation", zap.String("title", t.Title))
-			}
-
 			logger.Info("Completed title",
 				zap.String("title", t.Title),
 				zap.Duration("duration", time.Since(titleStart)))
@@ -234,14 +206,6 @@ func main() {
 	// Close SQLite channel and wait for writer to drain
 	close(sqliteCh)
 	sqliteWg.Wait()
-
-	// Load Summaries (Single batch write to avoid file contention)
-	if len(allSummaries) > 0 {
-		logger.Info("Writing gathered summaries", zap.Int("count", len(allSummaries)))
-		if err := parquetRepo.WriteSummaries(ctx, snapshotDate, allSummaries); err != nil {
-			logger.Error("Summaries write failed", zap.Error(err))
-		}
-	}
 
 	logger.Info("ETL Pipeline Completed Successfully",
 		zap.String("snapshot", snapshotDate),
