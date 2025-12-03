@@ -146,7 +146,11 @@ func (c *Client) ParseTitleXML(ctx context.Context, objPath string) ([]domain.Se
 	}
 	defer rc.Close()
 
-	decoder := xml.NewDecoder(rc)
+	return c.parseXML(rc)
+}
+
+func (c *Client) parseXML(r io.Reader) ([]domain.Section, error) {
+	decoder := xml.NewDecoder(r)
 
 	var sections []domain.Section
 	var currentText strings.Builder

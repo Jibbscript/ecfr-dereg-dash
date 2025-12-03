@@ -126,7 +126,14 @@ func (c *Collector) CollectForTitle(ctx context.Context, title string, since tim
 		return val, nil
 	}
 
-	// Fallback or empty
+	// Fallback: Try Vertex AI if available
+	if c.vertex != nil {
+		if lsa, err := c.fallbackWithVertex(ctx, title, since); err == nil {
+			return lsa, nil
+		}
+	}
+
+	// Final fallback
 	return domain.LSAActivity{
 		KeyKind:      "title",
 		Key:          title,

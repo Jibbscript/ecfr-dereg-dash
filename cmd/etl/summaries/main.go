@@ -9,6 +9,7 @@ import (
 
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/ecfr"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/vertexai"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/platform"
@@ -64,7 +65,13 @@ func main() {
 	}
 
 	ecfrClient := ecfr.NewClient()
-	summariesUseCase := usecase.NewSummaries(logger, vertexClient, parquetRepo)
+
+	sqliteRepo, err := sqlite.NewRepo(config.DataDir + "/ecfr.db")
+	if err != nil {
+		logger.Fatal("Failed to create SQLite repo", zap.Error(err))
+	}
+
+	summariesUseCase := usecase.NewSummaries(logger, vertexClient, parquetRepo, sqliteRepo)
 
 	logger.Info("Fetching title catalog from eCFR API")
 	titles, err := ecfrClient.GetTitles()

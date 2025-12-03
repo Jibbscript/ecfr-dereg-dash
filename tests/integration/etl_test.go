@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
@@ -13,8 +14,14 @@ import (
 func TestSnapshotFlow(t *testing.T) {
 	// Setup temp dir
 	tempDir := t.TempDir()
-	parquetRepo := parquet.NewRepo(tempDir)
-	sqliteRepo := sqlite.NewRepo(tempDir + "/test.db")
+	parquetRepo, err := parquet.NewLocalRepo(tempDir, "parquet")
+	if err != nil {
+		t.Fatalf("Failed to create parquet repo: %v", err)
+	}
+	sqliteRepo, err := sqlite.NewRepo(tempDir + "/test.db")
+	if err != nil {
+		t.Fatalf("Failed to create sqlite repo: %v", err)
+	}
 
 	_ = usecase.NewSnapshot(parquetRepo, sqliteRepo)
 
@@ -22,13 +29,13 @@ func TestSnapshotFlow(t *testing.T) {
 	sections := []domain.Section{
 		{ID: "1", WordCount: 100, ChecksumSHA256: "a"},
 	}
-	parquetRepo.WriteSections("2023-01-01", "1", sections)
+	parquetRepo.WriteSections(context.Background(), "2023-01-01", "1", sections)
 
 	sections2 := []domain.Section{
 		{ID: "1", WordCount: 110, ChecksumSHA256: "b"}, // Changed
 		{ID: "2", WordCount: 50, ChecksumSHA256: "c"},  // New
 	}
-	parquetRepo.WriteSections("2023-01-02", "1", sections2)
+	parquetRepo.WriteSections(context.Background(), "2023-01-02", "1", sections2)
 
 	// Test Diff
 	// We need to mock GetPrevSnapshot or implement it fully.
@@ -39,7 +46,7 @@ func TestSnapshotFlow(t *testing.T) {
 	// or we just test the logic that relies on ReadSections.
 
 	// Actually, let's just test ReadSections works.
-	read, err := parquetRepo.ReadSections("2023-01-01", "1")
+	read, err := parquetRepo.ReadSections(context.Background(), "2023-01-01", "1")
 	if err != nil {
 		t.Fatalf("ReadSections failed: %v", err)
 	}

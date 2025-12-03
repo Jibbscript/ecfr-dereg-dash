@@ -40,9 +40,19 @@ func TestParseTitleXML_AgencyID(t *testing.T) {
 	}
 
 	client := &Client{} // We don't need a full client for this test
-	sections, err := client.ParseTitleXML(tmpFile)
+
+	f, err := os.Open(tmpFile)
 	if err != nil {
-		t.Fatalf("ParseTitleXML failed: %v", err)
+		t.Fatalf("Failed to open temp file: %v", err)
+	}
+	defer f.Close()
+
+	// Use the unexported parseXML method via reflection or just make it exported?
+	// Since we are in the same package (govinfo), we can access unexported methods if the test is in package govinfo.
+	// The test file says "package govinfo", so we can access it.
+	sections, err := client.parseXML(f)
+	if err != nil {
+		t.Fatalf("parseXML failed: %v", err)
 	}
 
 	if len(sections) != 2 {
