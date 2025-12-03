@@ -105,6 +105,24 @@ func NewRepo(path string) (*Repo, error) {
 	}
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_lsa_title ON lsa_activity(title)`)
 
+	// Create summaries table for AI-generated summaries
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS summaries (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			kind TEXT NOT NULL DEFAULT 'title',
+			key TEXT NOT NULL,
+			text TEXT NOT NULL,
+			model TEXT DEFAULT 'gemini-2.5-pro',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(kind, key)
+		)
+	`)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_summaries_kind_key ON summaries(kind, key)`)
+
 	return &Repo{Path: path, db: db}, nil
 }
 
@@ -310,4 +328,75 @@ func (r *Repo) GetAgencyChecksum(agencyID string) (string, error) {
 
 	hash := sha256.Sum256([]byte(combined.String()))
 	return hex.EncodeToString(hash[:]), nil
+}
+
+// InsertSummary inserts or updates a single summary
+func (r *Repo) InsertSummary(summary domain.Summary) error {
+	_, err := r.db.Exec(`
+		INSERT OR REPLACE INTO summaries (kind, key, text, model, created_at)
+		VALUES (?, ?, ?, ?, ?)`,
+		summary.Kind, summary.Key, summary.Text, summary.Model, summary.CreatedAt)
+	return err
+}
+
+// InsertSummaries inserts or updates multiple summaries in a transaction
+func (r *Repo) InsertSummaries(summaries []domain.Summary) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`
+		INSERT OR REPLACE INTO summaries (kind, key, text, model, created_at)
+		VALUES (?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, s := range summaries {
+		_, err = stmt.Exec(s.Kind, s.Key, s.Text, s.Model, s.CreatedAt)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// GetAllSummaries retrieves all summaries from the database
+func (r *Repo) GetAllSummaries() ([]domain.Summary, error) {
+	rows, err := r.db.Query(`
+		SELECT kind, key, text, model, created_at
+		FROM summaries
+		ORDER BY key ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var summaries []domain.Summary
+	for rows.Next() {
+		var s domain.Summary
+		if err := rows.Scan(&s.Kind, &s.Key, &s.Text, &s.Model, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, s)
+	}
+	return summaries, nil
+}
+
+// GetSummaryByKey retrieves a single summary by kind and key
+func (r *Repo) GetSummaryByKey(kind, key string) (*domain.Summary, error) {
+	var s domain.Summary
+	err := r.db.QueryRow(`
+		SELECT kind, key, text, model, created_at
+		FROM summaries
+		WHERE kind = ? AND key = ?`, kind, key).Scan(&s.Kind, &s.Key, &s.Text, &s.Model, &s.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
 }

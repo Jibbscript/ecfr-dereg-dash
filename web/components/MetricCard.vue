@@ -9,9 +9,11 @@
             type="button"
             class="usa-button--unstyled info-button"
             :aria-label="`More information about ${title}`"
-            @click="$emit('info-click')"
+            @click="$emit('info-click', $event)"
           >
-            <span class="info-icon-text" aria-hidden="true">ⓘ</span>
+            <svg class="info-icon-svg" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+            </svg>
           </button>
         </h3>
       </div>
@@ -90,33 +92,52 @@ const valueClass = computed(() => ({
 
 .metric-card .usa-card__container {
   border-left: 4px solid #005ea2;
+  border-radius: 0 8px 8px 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.metric-card .usa-card__container:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.metric-card .usa-card__header {
+  padding-bottom: 0.5rem;
 }
 
 .metric-card .usa-card__heading {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
   color: #5c5c5c;
   margin-bottom: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
 }
 
 .info-button {
-  padding: 0;
+  padding: 0.125rem;
   background: none;
   border: none;
   cursor: pointer;
   color: #005ea2;
   display: inline-flex;
   align-items: center;
+  border-radius: 50%;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .info-button:hover {
   color: #1a4480;
+  background-color: rgba(0, 94, 162, 0.1);
 }
 
-.info-icon-text {
-  font-size: 1rem;
+.info-icon-svg {
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
 .metric-value {

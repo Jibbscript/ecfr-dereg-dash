@@ -395,3 +395,58 @@ func (c *Client) CallWithTools(ctx context.Context, prompt string, tools []Tool)
 	// Placeholder for tool use implementation with Vertex AI
 	return "", nil
 }
+
+// FetchSummariesFromBucket lists and reads all JSONL files in the specified bucket to retrieve summaries.
+func (c *Client) FetchSummariesFromBucket(ctx context.Context, bucketName string) ([]string, error) {
+	if c.client == nil {
+		// Mock data for local development/testing
+		return []string{
+			"Title 1: General Provisions\n\nSummary: This is a mock summary for Title 1.",
+			"Title 2: Grants and Agreements\n\nSummary: This is a mock summary for Title 2.",
+			"Title 50: Wildlife and Fisheries\n\nSummary: This is a mock summary for Title 50.",
+		}, nil
+	}
+
+	it := c.storageClient.Bucket(bucketName).Objects(ctx, &storage.Query{})
+	var summaries []string
+
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to list objects: %w", err)
+		}
+
+		if !strings.HasSuffix(attrs.Name, ".jsonl") {
+			continue
+		}
+
+		rc, err := c.storageClient.Bucket(bucketName).Object(attrs.Name).NewReader(ctx)
+		if err != nil {
+			// Log error but continue with other files? For now, we'll return error to be safe.
+			return nil, fmt.Errorf("failed to read object %s: %w", attrs.Name, err)
+		}
+		defer rc.Close()
+
+		scanner := bufio.NewScanner(rc)
+		for scanner.Scan() {
+			var line batchOutputLine
+			if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
+				continue
+			}
+
+			// Extract text from the response
+			if line.Response != nil && len(line.Response.Candidates) > 0 {
+				for _, part := range line.Response.Candidates[0].Content.Parts {
+					if part.Text != "" {
+						summaries = append(summaries, part.Text)
+					}
+				}
+			}
+		}
+	}
+
+	return summaries, nil
+}

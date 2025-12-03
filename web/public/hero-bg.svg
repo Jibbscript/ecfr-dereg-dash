@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="heroGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a4480"/>
+      <stop offset="100%" style="stop-color:#162e51"/>
+    </linearGradient>
+    <pattern id="gridPattern" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+    </pattern>
+    <pattern id="dotPattern" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="rgba(255,255,255,0.1)"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="url(#heroGradient)"/>
+  <rect width="100%" height="100%" fill="url(#gridPattern)"/>
+  <rect width="100%" height="100%" fill="url(#dotPattern)"/>
+
+  <!-- Abstract regulatory document shapes -->
+  <g opacity="0.1">
+    <!-- Document stack left -->
+    <rect x="50" y="80" width="120" height="160" rx="4" fill="#fff" transform="rotate(-5 110 160)"/>
+    <rect x="60" y="90" width="120" height="160" rx="4" fill="#fff" transform="rotate(-2 120 170)"/>
+    <rect x="70" y="100" width="120" height="160" rx="4" rx="4" fill="#fff"/>
+    <g transform="translate(80, 120)">
+      <rect width="100" height="4" fill="#1a4480" opacity="0.5"/>
+      <rect y="12" width="80" height="4" fill="#1a4480" opacity="0.5"/>
+      <rect y="24" width="90" height="4" fill="#1a4480" opacity="0.5"/>
+      <rect y="36" width="70" height="4" fill="#1a4480" opacity="0.5"/>
+      <rect y="48" width="85" height="4" fill="#1a4480" opacity="0.5"/>
+      <rect y="60" width="75" height="4" fill="#1a4480" opacity="0.5"/>
+    </g>
+
+    <!-- Document stack right -->
+    <rect x="950" y="60" width="140" height="180" rx="4" fill="#fff" transform="rotate(8 1020 150)"/>
+    <rect x="960" y="70" width="140" height="180" rx="4" fill="#fff" transform="rotate(4 1030 160)"/>
+    <rect x="970" y="80" width="140" height="180" rx="4" fill="#fff"/>
+    <g transform="translate(985, 100)">
+      <rect width="110" height="4" fill="#1a4480" opacity="0.5"/>
+      <rect y="14" width="90" height="4" fill="#1a4480" opacity="0.5"/>
+      <rect y="28" width="100" height="4" fill="#1a4480" opacity="0.5"/>
+      <rect y="42" width="80" height="4" fill="#1a4480" opacity="0.5"/>
+      <rect y="56" width="95" height="4" fill="#1a4480" opacity="0.5"/>
+      <rect y="70" width="85" height="4" fill="#1a4480" opacity="0.5"/>
+      <rect y="84" width="75" height="4" fill="#1a4480" opacity="0.5"/>
+    </g>
+
+    <!-- Decorative circles representing data points -->
+    <circle cx="300" cy="320" r="60" fill="none" stroke="#fff" stroke-width="2"/>
+    <circle cx="300" cy="320" r="40" fill="none" stroke="#fff" stroke-width="1.5"/>
+    <circle cx="300" cy="320" r="20" fill="#fff" opacity="0.3"/>
+
+    <circle cx="900" cy="350" r="45" fill="none" stroke="#fff" stroke-width="2"/>
+    <circle cx="900" cy="350" r="25" fill="none" stroke="#fff" stroke-width="1.5"/>
+
+    <!-- Connection lines suggesting network/complexity -->
+    <path d="M 200 50 Q 400 100 600 80 T 1000 120" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="8,4"/>
+    <path d="M 150 380 Q 400 300 650 350 T 1100 280" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="8,4"/>
+  </g>
+
+  <!-- Bar chart representation -->
+  <g transform="translate(750, 180)" opacity="0.15">
+    <rect x="0" y="100" width="20" height="80" fill="#fff"/>
+    <rect x="30" y="60" width="20" height="120" fill="#fff"/>
+    <rect x="60" y="80" width="20" height="100" fill="#fff"/>
+    <rect x="90" y="40" width="20" height="140" fill="#fff"/>
+    <rect x="120" y="70" width="20" height="110" fill="#fff"/>
+  </g>
+</svg>

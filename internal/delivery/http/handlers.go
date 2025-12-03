@@ -83,4 +83,19 @@ func SetupHandlers(r chi.Router, usecases Usecases, logger *zap.Logger) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(dummySection))
 	})
+
+	r.Get("/summaries", func(w http.ResponseWriter, req *http.Request) {
+		summaries, err := usecases.Summaries.GetAllSummaries(req.Context())
+		if err != nil {
+			logger.Error("Failed to get summaries", zap.Error(err))
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(summaries); err != nil {
+			logger.Error("Failed to encode response", zap.Error(err))
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+		}
+	})
 }

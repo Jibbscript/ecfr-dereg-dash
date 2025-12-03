@@ -22,7 +22,11 @@
       <h3>Components Explained</h3>
       <div class="component-list">
         <div class="component-item">
-          <div class="component-icon text-blue">📝</div>
+          <div class="component-icon icon-blue">
+            <svg aria-hidden="true" focusable="false" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+            </svg>
+          </div>
           <div class="component-content">
             <h4 class="component-title">Word Count (×1)</h4>
             <p>
@@ -31,34 +35,46 @@
           </div>
         </div>
         <div class="component-item">
-          <div class="component-icon text-green">📖</div>
+          <div class="component-icon icon-green">
+            <svg aria-hidden="true" focusable="false" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/>
+            </svg>
+          </div>
           <div class="component-content">
             <h4 class="component-title">Definition Count (×20)</h4>
             <p>
-              Terms defined using patterns like "<em>[term] means</em>" or section headers like 
-              "Definitions" or "As used in this part." More definitions indicate specialized 
+              Terms defined using patterns like "<em>[term] means</em>" or section headers like
+              "Definitions" or "As used in this part." More definitions indicate specialized
               vocabulary that requires extra cognitive effort.
             </p>
           </div>
         </div>
         <div class="component-item">
-          <div class="component-icon text-orange">🔗</div>
+          <div class="component-icon icon-orange">
+            <svg aria-hidden="true" focusable="false" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+            </svg>
+          </div>
           <div class="component-content">
             <h4 class="component-title">Cross-Reference Count (×50)</h4>
             <p>
-              Citations to other CFR sections (e.g., "§ 1.23" or "40 CFR 122.4"). Each cross-reference 
+              Citations to other CFR sections (e.g., "§ 1.23" or "40 CFR 122.4"). Each cross-reference
               requires the reader to consult additional regulatory text, significantly increasing complexity.
             </p>
           </div>
         </div>
         <div class="component-item">
-          <div class="component-icon text-red">⚖️</div>
+          <div class="component-icon icon-red">
+            <svg aria-hidden="true" focusable="false" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+            </svg>
+          </div>
           <div class="component-content">
             <h4 class="component-title">Modal Verb Count (×100)</h4>
             <p>
-              Binding language including: <strong>shall</strong>, <strong>must</strong>, 
-              <strong>may not</strong>, and <strong>must not</strong>. These words create 
-              legal obligations and carry the highest weight because they represent actual 
+              Binding language including: <strong>shall</strong>, <strong>must</strong>,
+              <strong>may not</strong>, and <strong>must not</strong>. These words create
+              legal obligations and carry the highest weight because they represent actual
               regulatory requirements.
             </p>
           </div>
@@ -91,7 +107,9 @@
     </div>
 
     <template #footer>
-      <UsaButton @click="handleClose">Close</UsaButton>
+      <UsaButton @click="handleClose" class="usa-button--big width-full tablet:width-auto">
+        Return to Dashboard
+      </UsaButton>
     </template>
   </UsaModal>
 </template>
@@ -153,13 +171,33 @@ function handleClose() {
 }
 
 .component-icon {
-  font-size: 1.5rem;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  border-radius: 8px;
+}
+
+.component-icon.icon-blue {
+  background-color: #e7f2f8;
+  color: #005ea2;
+}
+
+.component-icon.icon-green {
+  background-color: #ecf3ec;
+  color: #4d8055;
+}
+
+.component-icon.icon-orange {
+  background-color: #fef0e1;
+  color: #c05600;
+}
+
+.component-icon.icon-red {
+  background-color: #f8eff0;
+  color: #b50909;
 }
 
 .component-content {

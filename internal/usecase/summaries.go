@@ -3,9 +3,11 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/vertexai"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 	"go.uber.org/zap"
@@ -15,10 +17,38 @@ type Summaries struct {
 	logger      *zap.Logger
 	vertex      *vertexai.Client
 	parquetRepo *parquet.Repo
+	sqliteRepo  *sqlite.Repo
+
+	mu        sync.Mutex
+	cache     []domain.Summary
+	cacheTime time.Time
 }
 
-func NewSummaries(logger *zap.Logger, vertex *vertexai.Client, parquet *parquet.Repo) *Summaries {
-	return &Summaries{logger: logger, vertex: vertex, parquetRepo: parquet}
+func NewSummaries(logger *zap.Logger, vertex *vertexai.Client, parquet *parquet.Repo, sqliteRepo *sqlite.Repo) *Summaries {
+	return &Summaries{logger: logger, vertex: vertex, parquetRepo: parquet, sqliteRepo: sqliteRepo}
+}
+
+func (u *Summaries) GetAllSummaries(ctx context.Context) ([]domain.Summary, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	// Cache for 1 hour
+	if !u.cacheTime.IsZero() && time.Since(u.cacheTime) < 1*time.Hour {
+		return u.cache, nil
+	}
+
+	// Fetch summaries from SQLite database
+	summaries, err := u.sqliteRepo.GetAllSummaries()
+	if err != nil {
+		u.logger.Error("Failed to fetch summaries from SQLite", zap.Error(err))
+		return nil, err
+	}
+
+	u.cache = summaries
+	u.cacheTime = time.Now()
+
+	u.logger.Info("Loaded summaries from SQLite", zap.Int("count", len(summaries)))
+	return summaries, nil
 }
 
 func (u *Summaries) GenerateForTitle(ctx context.Context, title domain.Title, sections []domain.Section) ([]domain.Summary, error) {

@@ -25,5 +25,10 @@
     "vue": "latest",
     "vue-router": "latest",
     "vue-uswds": "^1.0.0"
+  },
+  "dependencies": {
+    "@types/dompurify": "^3.0.5",
+    "dompurify": "^3.3.0",
+    "marked": "^17.0.1"
   }
 }

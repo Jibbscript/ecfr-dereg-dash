@@ -12,8 +12,17 @@
             Explore and analyze the complexity of federal regulations across all agencies. 
             Track regulatory burden using the RSCS metric and identify opportunities for simplification.
           </p>
-<UsaButton variant="secondary" @click="explainer.open($event && $event.currentTarget)">
+<UsaButton variant="secondary" @click="explainer.open($event && $event.currentTarget)" class="hero-btn">
+            <svg class="usa-icon margin-right-05" aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+            </svg>
             Learn about RSCS
+          </UsaButton>
+          <UsaButton @click="showAiSummaries = true" class="margin-left-2 hero-btn">
+            <svg class="usa-icon margin-right-05" aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+            </svg>
+            AI Summaries
           </UsaButton>
         </div>
       </div>
@@ -57,10 +66,17 @@
     </section>
 
     <!-- RSCS Explainer Modal now provided globally in layout -->
+    <AiSummariesModal v-model:visible="showAiSummaries" />
 
     <!-- Data Section -->
     <section class="grid-container margin-top-4" aria-label="Agency data">
-      <h2 class="font-heading-xl margin-bottom-2">Agency Regulatory Metrics</h2>
+      <div class="section-header">
+        <svg class="section-icon" aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+        </svg>
+        <h2 class="font-heading-xl margin-bottom-0">Agency Regulatory Metrics</h2>
+      </div>
+      <p class="section-subtitle">Explore regulatory complexity data across all federal agencies</p>
 
       <!-- Filters -->
       <div class="grid-row grid-gap margin-bottom-3">
@@ -149,9 +165,11 @@
                     aria-label="Open RSCS explanation"
                     aria-haspopup="dialog"
                     aria-controls="rscs-explainer"
-@click.stop="explainer.open($event && $event.currentTarget)"
+                    @click.stop="explainer.open($event && $event.currentTarget)"
                   >
-                    ⓘ
+                    <svg class="usa-icon" aria-hidden="true" focusable="false" role="img" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                    </svg>
                   </button>
                 </div>
               </th>
@@ -227,6 +245,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRscsExplainer } from '../composables/useRscsExplainer'
+import AiSummariesModal from '../components/AiSummariesModal.vue'
 
 const selectedTitle = ref('')
 const includeChecksum = ref(false)
@@ -237,6 +256,7 @@ const expanded = ref({})
 const sortKey = ref('total_words')
 const sortDir = ref('desc')
 const explainer = useRscsExplainer()
+const showAiSummaries = ref(false)
 
 // Truncate checksum for display (show first 8 chars)
 function truncateChecksum(hash) {
@@ -342,14 +362,20 @@ onMounted(fetchAgencies)
 <style scoped>
 .usa-hero {
   background-color: #1a4480;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%23162e51' fill-opacity='0.4'%3E%3Cpath opacity='.5' d='M96 95h4v1h-4v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9zm-1 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9z'/%3E%3Cpath d='M6 5V0H5v5H0v1h5v94h1V6h94V5H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-  padding: 2rem 0 3rem;
+  background-image: url('/hero-bg.svg');
+  background-size: cover;
+  background-position: center;
+  padding: 3rem 0 4rem;
+  position: relative;
 }
 
 .usa-hero__callout {
-  background-color: rgba(26, 68, 128, 0.9);
-  max-width: 36rem;
-  padding: 2rem;
+  background-color: rgba(22, 46, 81, 0.95);
+  max-width: 40rem;
+  padding: 2.5rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
 }
 
 .usa-hero__heading {
@@ -367,6 +393,18 @@ onMounted(fetchAgencies)
 .usa-hero p {
   color: #fff;
   margin-bottom: 1.5rem;
+  opacity: 0.95;
+  line-height: 1.6;
+}
+
+.hero-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+.hero-btn .usa-icon {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .sortable-header {
@@ -398,17 +436,24 @@ onMounted(fetchAgencies)
 }
 
 .info-icon {
-  font-size: 1rem;
   color: #005ea2;
   padding: 0 0.25rem;
   background: none;
   border: none;
   cursor: pointer;
   vertical-align: middle;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s ease;
 }
 
 .info-icon:hover {
   color: #1a4480;
+}
+
+.usa-icon {
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
 .parent-row.has-children {
@@ -459,5 +504,44 @@ onMounted(fetchAgencies)
 
 .text-center {
   text-align: center;
+}
+
+/* Section Header */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.section-icon {
+  color: #005ea2;
+}
+
+.section-subtitle {
+  color: #71767a;
+  font-size: 1rem;
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+}
+
+/* Table Enhancements */
+.usa-table-container--scrollable {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.usa-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.usa-table thead th {
+  background-color: #f0f0f0;
+  border-bottom: 2px solid #005ea2;
+}
+
+.usa-table tbody tr {
+  transition: background-color 0.15s ease;
 }
 </style>

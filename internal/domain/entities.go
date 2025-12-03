@@ -55,11 +55,11 @@ type RawSection struct {
 }
 
 type Summary struct {
-	Kind      string // agency|title|section
-	Key       string
-	Text      string
-	Model     string
-	CreatedAt time.Time
+	Kind      string    `json:"kind"` // agency|title|section
+	Key       string    `json:"key"`
+	Text      string    `json:"text"`
+	Model     string    `json:"model"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type LSAActivity struct {

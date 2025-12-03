@@ -1,5 +1,7 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: [ 'build', '-t', 'us-central1-docker.pkg.dev/formal-flow-3rmrd/ecfr-repo/ecfr-web', '-f', 'Dockerfile.web', '.' ]
+    args: [ 'build', '-t', 'us-central1-docker.pkg.dev/formal-flow-3rmrd/ecfr-repo/ecfr-web', '--build-arg', 'API_BASE_URL=${_API_BASE_URL}', '-f', 'Dockerfile.web', '.' ]
 images:
   - 'us-central1-docker.pkg.dev/formal-flow-3rmrd/ecfr-repo/ecfr-web'
+substitutions:
+  _API_BASE_URL: 'https://ecfr-api-369420849740.us-central1.run.app'

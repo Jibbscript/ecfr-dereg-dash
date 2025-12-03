@@ -1,10 +1,6 @@
 <template>
   <div class="usa-layout">
-    <!-- Skip Navigation for Accessibility -->
-    <UsaSkipnav href="#main-content">Skip to main content</UsaSkipnav>
-
-    <!-- Official Government Banner -->
-    <UsaBanner />
+    <!-- Official Government Banner removed -->
 
     <!-- Site Header -->
     <UsaHeader>
@@ -88,6 +84,9 @@
       </template>
 
       <template #secondary-content>
+        <div class="grid-row flex-justify-end margin-bottom-2">
+          <UsaButton variant="outline" @click="scrollToTop">Return to top</UsaButton>
+        </div>
         <UsaIdentifier
           domain="ecfr-dashboard.gov"
           :links="identifierLinks"
@@ -144,6 +143,10 @@ const identifierLinks = ref([
     href: '#',
   },
 ])
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
 </script>
 
 <style scoped>
@@ -156,5 +159,9 @@ const identifierLinks = ref([
 .main-content {
   flex: 1;
   padding-bottom: 2rem;
+}
+
+:deep(.usa-footer__return-to-top) {
+  display: none !important;
 }
 </style>
