@@ -9,7 +9,6 @@ import (
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/govinfo"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
-	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/vertexai"
 	delivery "github.com/Jibbscript/ecfr-dereg-dashboard/internal/delivery/http"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/platform"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/usecase"
@@ -67,23 +66,11 @@ func main() {
 		}
 	}
 
-	var vertexClient *vertexai.Client
-	if os.Getenv("SKIP_VERTEX") == "true" || config.Env == "local" || config.Env == "dev" {
-		logger.Warn("Skipping Vertex Client initialization (using mock)")
-		vertexClient = vertexai.NewMockClient()
-	} else {
-		var err error
-		vertexClient, err = vertexai.NewClient(ctx, config.VertexProjectID, config.VertexLocation, config.VertexModelID, config.GCSBucket)
-		if err != nil {
-			logger.Fatal("Failed to create Vertex client", zap.Error(err))
-		}
-	}
-
 	usecases := delivery.Usecases{
 		Ingest:    usecase.NewIngest(logger, govinfoClient, parquetRepo, sqliteRepo),
 		Snapshot:  usecase.NewSnapshot(parquetRepo, sqliteRepo),
 		Metrics:   usecase.NewMetrics(duckHelper, sqliteRepo),
-		Summaries: usecase.NewSummaries(logger, vertexClient, parquetRepo, sqliteRepo),
+		Summaries: usecase.NewSummariesReadOnly(logger, sqliteRepo),
 	}
 
 	r := chi.NewRouter()

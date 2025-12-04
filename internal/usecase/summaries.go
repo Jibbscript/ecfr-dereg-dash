@@ -28,6 +28,12 @@ func NewSummaries(logger *zap.Logger, vertex *vertexai.Client, parquet *parquet.
 	return &Summaries{logger: logger, vertex: vertex, parquetRepo: parquet, sqliteRepo: sqliteRepo}
 }
 
+// NewSummariesReadOnly creates a Summaries usecase for read-only operations (API).
+// This constructor does not require Vertex AI client since GetAllSummaries only reads from SQLite.
+func NewSummariesReadOnly(logger *zap.Logger, sqliteRepo *sqlite.Repo) *Summaries {
+	return &Summaries{logger: logger, sqliteRepo: sqliteRepo}
+}
+
 func (u *Summaries) GetAllSummaries(ctx context.Context) ([]domain.Summary, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()

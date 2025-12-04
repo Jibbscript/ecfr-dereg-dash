@@ -29,7 +29,7 @@ func getEnv(key, fallback string) string {
 
 func LoadConfig() Config {
 	return Config{
-		Env:             os.Getenv("ENV"),
+		Env:             getEnv("ENV", "local"),
 		DataDir:         getEnv("DATA_DIR", "data"),
 		VertexProjectID: os.Getenv("VERTEX_PROJECT_ID"),
 		VertexLocation:  getEnv("VERTEX_LOCATION", "us-central1"),

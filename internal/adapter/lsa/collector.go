@@ -221,6 +221,12 @@ func (c *Collector) fetchDocumentCount(ctx context.Context, agencySlug, docType 
 	return frResp.Count, nil
 }
 
+// AgencyFacet represents a single agency facet entry from the Federal Register API
+type AgencyFacet struct {
+	Count int    `json:"count"`
+	Name  string `json:"name"`
+}
+
 // fetchDocumentCountsWithFacets fetches document counts for all agencies using faceted search
 func (c *Collector) fetchDocumentCountsWithFacets(ctx context.Context, docType string, startDate, endDate time.Time) (map[string]int, error) {
 	baseURL := "https://www.federalregister.gov/api/v1/documents/facets/agency"
@@ -248,13 +254,23 @@ func (c *Collector) fetchDocumentCountsWithFacets(ctx context.Context, docType s
 		return nil, fmt.Errorf("federal register facets API returned %s", resp.Status)
 	}
 
-	// The facets endpoint returns a map of agency slug -> count
-	var facets map[string]int
+	// The facets endpoint returns a map of agency slug -> {count, name}
+	var facets map[string]AgencyFacet
 	if err := json.NewDecoder(resp.Body).Decode(&facets); err != nil {
 		return nil, err
 	}
 
-	return facets, nil
+	// Extract just the counts
+	result := make(map[string]int, len(facets))
+	for slug, facet := range facets {
+		result[slug] = facet.Count
+		// Also cache agency name for later enrichment
+		if _, ok := c.agencyInfo[slug]; !ok {
+			c.agencyInfo[slug] = AgencyInfo{Slug: slug, Name: facet.Name}
+		}
+	}
+
+	return result, nil
 }
 
 // FetchFederalRegisterAgencies fetches the list of agencies from the Federal Register API
