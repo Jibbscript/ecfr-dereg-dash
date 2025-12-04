@@ -2,7 +2,6 @@ package govinfo
 
 import (
 	"context"
-	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -37,26 +36,6 @@ func NewClient(ctx context.Context, rawBucketName, rawPrefix string) (*Client, e
 		rawBucketName: rawBucketName,
 		rawPrefix:     rawPrefix,
 	}, nil
-}
-
-type IndexResponse struct {
-	Files []IndexFile `json:"files"`
-}
-
-type IndexFile struct {
-	Name     string `json:"name"`
-	CFRTitle int    `json:"cfrTitle"`
-	Link     string `json:"link"`
-}
-
-type TitleResponse struct {
-	Files []TitleFile `json:"files"`
-}
-
-type TitleFile struct {
-	Name          string `json:"name"`
-	FileExtension string `json:"fileExtension"`
-	Link          string `json:"link"`
 }
 
 func (c *Client) objectPath(xmlName string) string {
@@ -113,29 +92,6 @@ func (c *Client) DownloadTitleXML(ctx context.Context, title int) (string, error
 	}
 
 	return objPath, nil
-}
-
-func (c *Client) fetchJSON(url string, target interface{}) error {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Check for 404 or other errors
-	if resp.StatusCode != http.StatusOK {
-		// Read body for error details
-		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("GET %s: status %s, body: %q", url, resp.Status, string(bodyBytes))
-	}
-
-	return json.NewDecoder(resp.Body).Decode(target)
 }
 
 // ParseTitleXML reads XML from GCS instead of local disk.
