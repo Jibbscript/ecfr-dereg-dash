@@ -296,30 +296,38 @@ func (r *Repo) WriteDiffs(ctx context.Context, snapshot, title string, diffs []d
 	return w.Close()
 }
 
-// LSARecord is a parquet-compatible representation of LSA activity
-type LSARecord struct {
-	Title      string    `parquet:"title"`
-	Snapshot   string    `parquet:"snapshot_date"`
-	Proposals  int       `parquet:"proposals"`
-	Amendments int       `parquet:"amendments"`
-	Finals     int       `parquet:"finals"`
-	CapturedAt time.Time `parquet:"captured_at"`
-	SourceHint string    `parquet:"source_hint"`
+// AgencyLSARecord is a parquet-compatible representation of per-agency LSA activity
+type AgencyLSARecord struct {
+	AgencyID       string    `parquet:"agency_id"`
+	AgencyName     string    `parquet:"agency_name"`
+	ProposedRules  int       `parquet:"proposed_rules"`
+	FinalRules     int       `parquet:"final_rules"`
+	Notices        int       `parquet:"notices"`
+	TotalDocuments int       `parquet:"total_documents"`
+	SnapshotDate   string    `parquet:"snapshot_date"`
+	CapturedAt     time.Time `parquet:"captured_at"`
+	SourceHint     string    `parquet:"source_hint"`
 }
 
-func (r *Repo) WriteLSA(ctx context.Context, snapshot, title string, lsa domain.LSAActivity) error {
-	record := LSARecord{
-		Title:      title,
-		Snapshot:   snapshot,
-		Proposals:  lsa.ProposalsCount,
-		Amendments: lsa.AmendmentsCount,
-		Finals:     lsa.FinalsCount,
-		CapturedAt: lsa.CapturedAt,
-		SourceHint: lsa.SourceHint,
+// WriteAgencyLSA writes per-agency LSA data to Parquet
+func (r *Repo) WriteAgencyLSA(ctx context.Context, snapshot string, lsaRecords []domain.AgencyLSA) error {
+	records := make([]AgencyLSARecord, len(lsaRecords))
+	for i, lsa := range lsaRecords {
+		records[i] = AgencyLSARecord{
+			AgencyID:       lsa.AgencyID,
+			AgencyName:     lsa.AgencyName,
+			ProposedRules:  lsa.ProposedRules,
+			FinalRules:     lsa.FinalRules,
+			Notices:        lsa.Notices,
+			TotalDocuments: lsa.TotalDocuments,
+			SnapshotDate:   lsa.SnapshotDate,
+			CapturedAt:     lsa.CapturedAt,
+			SourceHint:     lsa.SourceHint,
+		}
 	}
 
 	if r.isLocal() {
-		path := r.localPath(snapshot, title+"_lsa.parquet")
+		path := r.localPath(snapshot, "agency_lsa.parquet")
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return err
 		}
@@ -329,8 +337,8 @@ func (r *Repo) WriteLSA(ctx context.Context, snapshot, title string, lsa domain.
 		}
 		defer f.Close()
 
-		writer := parquet.NewGenericWriter[LSARecord](f)
-		if _, err := writer.Write([]LSARecord{record}); err != nil {
+		writer := parquet.NewGenericWriter[AgencyLSARecord](f)
+		if _, err := writer.Write(records); err != nil {
 			return err
 		}
 		if err := writer.Close(); err != nil {
@@ -339,12 +347,12 @@ func (r *Repo) WriteLSA(ctx context.Context, snapshot, title string, lsa domain.
 		return nil
 	}
 
-	path := r.objectPath(snapshot, title+"_lsa.parquet")
+	path := r.objectPath(snapshot, "agency_lsa.parquet")
 	w := r.client.Bucket(r.bucketName).Object(path).NewWriter(ctx)
 	defer w.Close()
 
-	writer := parquet.NewGenericWriter[LSARecord](w)
-	if _, err := writer.Write([]LSARecord{record}); err != nil {
+	writer := parquet.NewGenericWriter[AgencyLSARecord](w)
+	if _, err := writer.Write(records); err != nil {
 		return err
 	}
 	if err := writer.Close(); err != nil {

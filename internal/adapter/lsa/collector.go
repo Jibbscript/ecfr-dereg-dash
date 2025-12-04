@@ -2,163 +2,296 @@ package lsa
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
+	"net/url"
 	"time"
 
-	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/ecfr"
-	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/vertexai"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
-	"golang.org/x/net/html"
 )
 
+// FederalRegisterResponse represents the API response from federalregister.gov
+type FederalRegisterResponse struct {
+	Count       int                    `json:"count"`
+	Description string                 `json:"description"`
+	TotalPages  int                    `json:"total_pages"`
+	NextPageURL string                 `json:"next_page_url"`
+	Results     []FederalRegisterDoc   `json:"results"`
+	Facets      *FederalRegisterFacets `json:"facets,omitempty"`
+}
+
+type FederalRegisterDoc struct {
+	DocumentNumber  string   `json:"document_number"`
+	Type            string   `json:"type"`
+	Title           string   `json:"title"`
+	PublicationDate string   `json:"publication_date"`
+	AgencyNames     []string `json:"agency_names"`
+}
+
+type FederalRegisterFacets struct {
+	Agency map[string]int `json:"agency"`
+}
+
+// AgencyInfo represents agency data from the Federal Register agencies endpoint
+type AgencyInfo struct {
+	ID         int    `json:"id"`
+	ParentID   *int   `json:"parent_id"`
+	Name       string `json:"name"`
+	ShortName  string `json:"short_name"`
+	Slug       string `json:"slug"`
+	URL        string `json:"url"`
+	JSONurl    string `json:"json_url"`
+	RecentDocs string `json:"recent_articles_url"`
+}
+
 type Collector struct {
-	ecfr    *ecfr.Client
-	vertex  *vertexai.Client
-	baseURL string
-	client  *http.Client
-	// Cache for LSA data
-	lsaData map[string]domain.LSAActivity
+	client *http.Client
+	// Cache for agency LSA data
+	agencyLSAData map[string]domain.AgencyLSA
+	// Cache for agency info from Federal Register
+	agencyInfo map[string]AgencyInfo
 }
 
-func NewCollector(ecfr *ecfr.Client, vertex *vertexai.Client) *Collector {
+func NewCollector() *Collector {
 	return &Collector{
-		ecfr:    ecfr,
-		vertex:  vertex,
-		baseURL: "https://www.govinfo.gov/content/pkg",
-		client:  &http.Client{Timeout: 60 * time.Second},
-		lsaData: make(map[string]domain.LSAActivity),
+		client:        &http.Client{Timeout: 60 * time.Second},
+		agencyLSAData: make(map[string]domain.AgencyLSA),
+		agencyInfo:    make(map[string]AgencyInfo),
 	}
 }
 
-// CollectLSAData fetches the LSA data from the Federal Register ReaderAids page.
-// Requirement: "fetched via the ReaderAid section... published on the last day of each calendar month."
-func (c *Collector) CollectLSAData(ctx context.Context) error {
-	// 1. Determine the last day of the previous month
-	now := time.Now()
-	currentMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	lastMonthEnd := currentMonth.AddDate(0, 0, -1)
-	dateStr := lastMonthEnd.Format("2006-01-02")
+// CollectAgencyLSA fetches LSA data for all agencies from the Federal Register API.
+// It queries recent regulatory documents (proposed rules, final rules, notices) per agency.
+func (c *Collector) CollectAgencyLSA(ctx context.Context, agencies []string) ([]domain.AgencyLSA, error) {
+	// Reset cache
+	c.agencyLSAData = make(map[string]domain.AgencyLSA)
 
-	// 2. Construct URL
-	// Example: https://www.govinfo.gov/content/pkg/FR-2025-01-31/html/FR-2025-01-31-ReaderAids.htm
-	url := fmt.Sprintf("%s/FR-%s/html/FR-%s-ReaderAids.htm", c.baseURL, dateStr, dateStr)
+	snapshotDate := time.Now().Format("2006-01-02")
+	capturedAt := time.Now()
 
-	// 3. Fetch
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return err
+	// Calculate date range: last 30 days
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -30)
+
+	var results []domain.AgencyLSA
+
+	for _, agencySlug := range agencies {
+		// Fetch counts for each document type
+		proposedRules, err := c.fetchDocumentCount(ctx, agencySlug, "PRORULE", startDate, endDate)
+		if err != nil {
+			// Log but continue with other agencies
+			proposedRules = 0
+		}
+
+		finalRules, err := c.fetchDocumentCount(ctx, agencySlug, "RULE", startDate, endDate)
+		if err != nil {
+			finalRules = 0
+		}
+
+		notices, err := c.fetchDocumentCount(ctx, agencySlug, "NOTICE", startDate, endDate)
+		if err != nil {
+			notices = 0
+		}
+
+		agencyLSA := domain.AgencyLSA{
+			AgencyID:       agencySlug,
+			AgencyName:     agencySlug, // Will be enriched later if we have agency info
+			ProposedRules:  proposedRules,
+			FinalRules:     finalRules,
+			Notices:        notices,
+			TotalDocuments: proposedRules + finalRules + notices,
+			SnapshotDate:   snapshotDate,
+			CapturedAt:     capturedAt,
+			SourceHint:     "federalregister-api",
+		}
+
+		// Enrich with agency name if available
+		if info, ok := c.agencyInfo[agencySlug]; ok {
+			agencyLSA.AgencyName = info.Name
+		}
+
+		c.agencyLSAData[agencySlug] = agencyLSA
+		results = append(results, agencyLSA)
 	}
+
+	return results, nil
+}
+
+// CollectAgencyLSABatch fetches LSA data for multiple agencies efficiently using faceted search.
+// This is more efficient than individual queries when collecting for many agencies.
+func (c *Collector) CollectAgencyLSABatch(ctx context.Context) ([]domain.AgencyLSA, error) {
+	snapshotDate := time.Now().Format("2006-01-02")
+	capturedAt := time.Now()
+
+	// Calculate date range: last 30 days
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -30)
+
+	// Fetch document counts by type with agency facets
+	proposedByAgency, err := c.fetchDocumentCountsWithFacets(ctx, "PRORULE", startDate, endDate)
+	if err != nil {
+		proposedByAgency = make(map[string]int)
+	}
+
+	finalByAgency, err := c.fetchDocumentCountsWithFacets(ctx, "RULE", startDate, endDate)
+	if err != nil {
+		finalByAgency = make(map[string]int)
+	}
+
+	noticesByAgency, err := c.fetchDocumentCountsWithFacets(ctx, "NOTICE", startDate, endDate)
+	if err != nil {
+		noticesByAgency = make(map[string]int)
+	}
+
+	// Merge all agency slugs
+	allAgencies := make(map[string]bool)
+	for slug := range proposedByAgency {
+		allAgencies[slug] = true
+	}
+	for slug := range finalByAgency {
+		allAgencies[slug] = true
+	}
+	for slug := range noticesByAgency {
+		allAgencies[slug] = true
+	}
+
+	var results []domain.AgencyLSA
+	for agencySlug := range allAgencies {
+		proposed := proposedByAgency[agencySlug]
+		final := finalByAgency[agencySlug]
+		notices := noticesByAgency[agencySlug]
+
+		agencyLSA := domain.AgencyLSA{
+			AgencyID:       agencySlug,
+			AgencyName:     agencySlug,
+			ProposedRules:  proposed,
+			FinalRules:     final,
+			Notices:        notices,
+			TotalDocuments: proposed + final + notices,
+			SnapshotDate:   snapshotDate,
+			CapturedAt:     capturedAt,
+			SourceHint:     "federalregister-api-batch",
+		}
+
+		c.agencyLSAData[agencySlug] = agencyLSA
+		results = append(results, agencyLSA)
+	}
+
+	return results, nil
+}
+
+// fetchDocumentCount queries the Federal Register API for document count by agency and type
+func (c *Collector) fetchDocumentCount(ctx context.Context, agencySlug, docType string, startDate, endDate time.Time) (int, error) {
+	// Build API URL
+	// https://www.federalregister.gov/api/v1/documents.json?conditions[agencies][]=agency-slug&conditions[type][]=RULE&conditions[publication_date][gte]=2024-01-01
+	baseURL := "https://www.federalregister.gov/api/v1/documents.json"
+
+	params := url.Values{}
+	params.Set("conditions[agencies][]", agencySlug)
+	params.Set("conditions[type][]", docType)
+	params.Set("conditions[publication_date][gte]", startDate.Format("2006-01-02"))
+	params.Set("conditions[publication_date][lte]", endDate.Format("2006-01-02"))
+	params.Set("per_page", "1") // We only need the count, not the documents
+	params.Set("fields[]", "document_number")
+
+	reqURL := baseURL + "?" + params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to fetch LSA data from %s: %s", url, resp.Status)
+		return 0, fmt.Errorf("federal register API returned %s", resp.Status)
 	}
 
-	// 4. Parse
-	// We need to extract LSA info for titles.
-	// The HTML structure varies, but typically has a list or table "CFR PARTS AFFECTED IN THIS ISSUE".
-	// Since parsing HTML accurately without a specific structure is hard, and we have Vertex AI,
-	// we could potentially use Vertex to extract structured data if we send the text.
-	// However, "Create a new download job... access and parse this data" implies we should try parsing.
-
-	// For this implementation, I'll do a basic extraction.
-	// The ReaderAids page has a section "LIST OF CFR SECTIONS AFFECTED".
-	// It lists Titles and Parts.
-	// We will count occurrences of "Title XX" to estimate activity if exact parsing is complex.
-	// But let's try to populate lsaData map.
-
-	// Reset cache
-	c.lsaData = make(map[string]domain.LSAActivity)
-
-	// Simplified parsing: Count mentions of "Title X" in the LSA section.
-	// In reality, we'd need a robust parser or LLM.
-	// Let's assume we count "Title \d+" pattern matches in the text content.
-
-	// ... Parsing logic ... (Simplified for this step as full HTML parsing is involved)
-	// I'll implement a placeholder that scans for "Title [0-9]+" and counts them.
-
-	tokenizer := html.NewTokenizer(resp.Body)
-	for {
-		tt := tokenizer.Next()
-		if tt == html.ErrorToken {
-			break
-		}
-		if tt == html.TextToken {
-			text := string(tokenizer.Text())
-			// Look for "Title 12" etc.
-			// This is a naive heuristic.
-			// A better approach would be to use the Vertex AI to extract this if allowed,
-			// but the requirement is "access and parse".
-			// Given I cannot see the page structure, I will implement a basic counter.
-			for i := 1; i <= 50; i++ {
-				titleKey := fmt.Sprintf("%d", i)
-				pattern := fmt.Sprintf("Title %d", i)
-				if strings.Contains(text, pattern) {
-					activity := c.lsaData[titleKey]
-					activity.AmendmentsCount++ // Just incrementing activity for now
-					c.lsaData[titleKey] = activity
-				}
-			}
-		}
+	var frResp FederalRegisterResponse
+	if err := json.NewDecoder(resp.Body).Decode(&frResp); err != nil {
+		return 0, err
 	}
 
-	return nil
+	return frResp.Count, nil
 }
 
-func (c *Collector) CollectForTitle(ctx context.Context, title string, since time.Time) (domain.LSAActivity, error) {
-	// If data not collected, try to collect
-	if len(c.lsaData) == 0 {
-		_ = c.CollectLSAData(ctx)
-	}
+// fetchDocumentCountsWithFacets fetches document counts for all agencies using faceted search
+func (c *Collector) fetchDocumentCountsWithFacets(ctx context.Context, docType string, startDate, endDate time.Time) (map[string]int, error) {
+	baseURL := "https://www.federalregister.gov/api/v1/documents/facets/agency"
 
-	if val, ok := c.lsaData[title]; ok {
-		val.KeyKind = "title"
-		val.Key = title
-		val.SinceRevDate = since
-		val.CapturedAt = time.Now()
-		val.SourceHint = "fr-readeraids"
-		return val, nil
-	}
+	params := url.Values{}
+	params.Set("conditions[type][]", docType)
+	params.Set("conditions[publication_date][gte]", startDate.Format("2006-01-02"))
+	params.Set("conditions[publication_date][lte]", endDate.Format("2006-01-02"))
 
-	// Fallback: Try Vertex AI if available
-	if c.vertex != nil {
-		if lsa, err := c.fallbackWithVertex(ctx, title, since); err == nil {
-			return lsa, nil
-		}
-	}
+	reqURL := baseURL + "?" + params.Encode()
 
-	// Final fallback
-	return domain.LSAActivity{
-		KeyKind:      "title",
-		Key:          title,
-		SinceRevDate: since,
-		CapturedAt:   time.Now(),
-		SourceHint:   "fr-readeraids-empty",
-	}, nil
-}
-
-func (c *Collector) fallbackWithVertex(ctx context.Context, title string, since time.Time) (domain.LSAActivity, error) {
-	prompt := "Search GovInfo for LSA changes in title " + title + " since " + since.Format("2006-01-02") + ". Extract counts: proposals, amendments, finals."
-	tools := []vertexai.Tool{}
-	_, err := c.vertex.CallWithTools(ctx, prompt, tools)
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
-		return domain.LSAActivity{}, err
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("federal register facets API returned %s", resp.Status)
 	}
 
-	return domain.LSAActivity{
-		KeyKind:         "title",
-		Key:             title,
-		SinceRevDate:    since,
-		ProposalsCount:  0,
-		AmendmentsCount: 0,
-		FinalsCount:     0,
-		CapturedAt:      time.Now(),
-		SourceHint:      "vertex-tool",
-	}, nil
+	// The facets endpoint returns a map of agency slug -> count
+	var facets map[string]int
+	if err := json.NewDecoder(resp.Body).Decode(&facets); err != nil {
+		return nil, err
+	}
+
+	return facets, nil
+}
+
+// FetchFederalRegisterAgencies fetches the list of agencies from the Federal Register API
+func (c *Collector) FetchFederalRegisterAgencies(ctx context.Context) ([]AgencyInfo, error) {
+	reqURL := "https://www.federalregister.gov/api/v1/agencies.json"
+
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("federal register agencies API returned %s", resp.Status)
+	}
+
+	var agencies []AgencyInfo
+	if err := json.NewDecoder(resp.Body).Decode(&agencies); err != nil {
+		return nil, err
+	}
+
+	// Cache agency info
+	for _, agency := range agencies {
+		c.agencyInfo[agency.Slug] = agency
+	}
+
+	return agencies, nil
+}
+
+// GetAgencyLSA retrieves cached LSA data for a specific agency
+func (c *Collector) GetAgencyLSA(agencySlug string) (domain.AgencyLSA, bool) {
+	lsa, ok := c.agencyLSAData[agencySlug]
+	return lsa, ok
 }

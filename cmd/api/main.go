@@ -6,9 +6,7 @@ import (
 	"os"
 
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/duck"
-	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/ecfr"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/govinfo"
-	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/lsa"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/vertexai"
@@ -58,7 +56,6 @@ func main() {
 		logger.Fatal("Failed to create DuckDB helper", zap.Error(err))
 	}
 
-	ecfrClient := ecfr.NewClient() // Still kept for LSA if needed, or remove if unused
 	var govinfoClient *govinfo.Client
 	if config.Env == "local" || config.Env == "dev" {
 		logger.Warn("Skipping GovInfo Client initialization (local mode)")
@@ -82,10 +79,8 @@ func main() {
 		}
 	}
 
-	lsaCollector := lsa.NewCollector(ecfrClient, vertexClient)
-
 	usecases := delivery.Usecases{
-		Ingest:    usecase.NewIngest(logger, govinfoClient, lsaCollector, parquetRepo, sqliteRepo),
+		Ingest:    usecase.NewIngest(logger, govinfoClient, parquetRepo, sqliteRepo),
 		Snapshot:  usecase.NewSnapshot(parquetRepo, sqliteRepo),
 		Metrics:   usecase.NewMetrics(duckHelper, sqliteRepo),
 		Summaries: usecase.NewSummaries(logger, vertexClient, parquetRepo, sqliteRepo),

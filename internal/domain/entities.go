@@ -73,6 +73,19 @@ type LSAActivity struct {
 	SourceHint      string
 }
 
+// AgencyLSA tracks regulatory activity (proposed rules, final rules, notices) per agency
+type AgencyLSA struct {
+	AgencyID       string    // Agency slug/ID (e.g., "environmental-protection-agency")
+	AgencyName     string    // Human-readable agency name
+	ProposedRules  int       // Count of proposed rules
+	FinalRules     int       // Count of final rules
+	Notices        int       // Count of notices
+	TotalDocuments int       // Total document count
+	SnapshotDate   string    // Date of data collection (YYYY-MM-DD)
+	CapturedAt     time.Time // Timestamp when data was fetched
+	SourceHint     string    // Data source identifier (e.g., "federalregister-api")
+}
+
 type Diff struct {
 	SectionID      string
 	DeltaWordCount int
