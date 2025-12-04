@@ -7,12 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/ecfr"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/govinfo"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/lsa"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
-	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/vertexai"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/platform"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/usecase"
@@ -71,8 +69,6 @@ func main() {
 		logger.Info("Agency data ingested successfully")
 	}
 
-	ecfrClient := ecfr.NewClient()
-
 	govinfoClient, err := govinfo.NewClient(ctx, config.RawXMLBucket, config.RawXMLPrefix)
 	if err != nil {
 		if config.Env == "local" {
@@ -83,21 +79,15 @@ func main() {
 		logger.Fatal("Failed to create GovInfo client", zap.Error(err))
 	}
 
-	vertexClient, err := vertexai.NewClient(ctx, config.VertexProjectID, config.VertexLocation, config.VertexModelID, config.GCSBucket)
-	if err != nil {
-		logger.Warn("Failed to create Vertex client, using mock", zap.Error(err))
-		vertexClient = vertexai.NewMockClient()
-	}
+	lsaCollector := lsa.NewCollector()
 
-	lsaCollector := lsa.NewCollector(ecfrClient, vertexClient)
-
-	ingestUseCase := usecase.NewIngest(logger, govinfoClient, lsaCollector, parquetRepo, sqliteRepo)
+	ingestUseCase := usecase.NewIngest(logger, govinfoClient, parquetRepo, sqliteRepo)
 	snapshotUseCase := usecase.NewSnapshot(parquetRepo, sqliteRepo)
 
 	snapshotDate := time.Now().Format("2006-01-02")
 
 	// Step 1: Fetch title catalog
-	logger.Info("Step 1/4: Fetching changed titles (Extract)")
+	logger.Info("Step 1/5: Fetching changed titles (Extract)")
 	extractStart := time.Now()
 	changedTitles, err := ingestUseCase.FetchChangedTitles(ctx)
 	if err != nil {
@@ -178,21 +168,6 @@ func main() {
 				}
 			}
 
-			// Step 4: LSA metric (Transform)
-			lsaCounts, err := lsaCollector.CollectForTitle(ctx, t.Title, t.LatestAmendedOn)
-			if err != nil {
-				logger.Error("LSA collect failed", zap.String("title", t.Title), zap.Error(err))
-			} else {
-				// Write to SQLite (for API queries)
-				if err := sqliteRepo.InsertLSA(lsaCounts, snapshotDate); err != nil {
-					logger.Error("LSA SQLite write failed", zap.String("title", t.Title), zap.Error(err))
-				}
-				// Write to Parquet (for analytics)
-				if err := parquetRepo.WriteLSA(ctx, snapshotDate, t.Title, lsaCounts); err != nil {
-					logger.Error("LSA Parquet write failed", zap.String("title", t.Title), zap.Error(err))
-				}
-			}
-
 			logger.Info("Completed title",
 				zap.String("title", t.Title),
 				zap.Duration("duration", time.Since(titleStart)))
@@ -206,6 +181,33 @@ func main() {
 	// Close SQLite channel and wait for writer to drain
 	close(sqliteCh)
 	sqliteWg.Wait()
+
+	// Step 4: Collect Agency-level LSA data from Federal Register API
+	logger.Info("Step 4/5: Collecting agency-level LSA data (Transform)")
+	agencyLSAStart := time.Now()
+
+	agencyLSARecords, err := lsaCollector.CollectAgencyLSABatch(ctx)
+	if err != nil {
+		logger.Error("Agency LSA batch collection failed", zap.Error(err))
+	} else {
+		logger.Info("Collected agency LSA data",
+			zap.Int("agency_count", len(agencyLSARecords)),
+			zap.Duration("duration", time.Since(agencyLSAStart)))
+
+		// Write to SQLite
+		if err := sqliteRepo.InsertAgencyLSABatch(agencyLSARecords); err != nil {
+			logger.Error("Agency LSA SQLite write failed", zap.Error(err))
+		} else {
+			logger.Info("Agency LSA data written to SQLite")
+		}
+
+		// Write to Parquet
+		if err := parquetRepo.WriteAgencyLSA(ctx, snapshotDate, agencyLSARecords); err != nil {
+			logger.Error("Agency LSA Parquet write failed", zap.Error(err))
+		} else {
+			logger.Info("Agency LSA data written to Parquet")
+		}
+	}
 
 	logger.Info("ETL Pipeline Completed Successfully",
 		zap.String("snapshot", snapshotDate),

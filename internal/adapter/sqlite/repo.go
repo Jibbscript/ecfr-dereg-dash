@@ -105,6 +105,29 @@ func NewRepo(path string) (*Repo, error) {
 	}
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_lsa_title ON lsa_activity(title)`)
 
+	// Create agency_lsa table for per-agency LSA data from Federal Register API
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS agency_lsa (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			agency_id     TEXT NOT NULL,
+			agency_name   TEXT NOT NULL,
+			proposed_rules INTEGER DEFAULT 0,
+			final_rules   INTEGER DEFAULT 0,
+			notices       INTEGER DEFAULT 0,
+			total_documents INTEGER DEFAULT 0,
+			snapshot_date TEXT NOT NULL,
+			captured_at   DATETIME,
+			source_hint   TEXT,
+			UNIQUE(agency_id, snapshot_date)
+		)
+	`)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_agency_lsa_agency ON agency_lsa(agency_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_agency_lsa_snapshot ON agency_lsa(snapshot_date)`)
+
 	// Create summaries table for AI-generated summaries
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS summaries (
@@ -147,7 +170,8 @@ func (r *Repo) InsertSections(sections []domain.Section) error {
 }
 
 func (r *Repo) GetAgencyTotals(titleFilter *string) ([]domain.AgencyMetric, error) {
-	// Build query with JOIN through agency_cfr_references and weighted LSA
+	// Build query with JOIN through agency_cfr_references
+	// LSA counts now come directly from agency_lsa table (per-agency from Federal Register API)
 	query := `
 		WITH agency_title_words AS (
 			-- Get word count per agency per title
@@ -162,25 +186,16 @@ func (r *Repo) GetAgencyTotals(titleFilter *string) ([]domain.AgencyMetric, erro
 			GROUP BY acr.agency_id, acr.title
 		),
 		agency_totals AS (
-			-- Get total words per agency (for weighting)
+			-- Get total words per agency
 			SELECT agency_id, SUM(title_words) as total_words
 			FROM agency_title_words
 			GROUP BY agency_id
 		),
-		weighted_lsa AS (
-			-- Compute weighted LSA: (title_words / total_words) * lsa_count
-			SELECT
-				atw.agency_id,
-				SUM(
-					CASE WHEN at.total_words > 0
-					THEN (CAST(atw.title_words AS REAL) / at.total_words)
-						 * (COALESCE(l.proposals, 0) + COALESCE(l.amendments, 0) + COALESCE(l.finals, 0))
-					ELSE 0 END
-				) as weighted_lsa
-			FROM agency_title_words atw
-			JOIN agency_totals at ON at.agency_id = atw.agency_id
-			LEFT JOIN lsa_activity l ON l.title = CAST(atw.title AS TEXT)
-			GROUP BY atw.agency_id
+		latest_agency_lsa AS (
+			-- Get latest LSA data per agency from agency_lsa table
+			SELECT agency_id, total_documents
+			FROM agency_lsa
+			WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM agency_lsa)
 		)
 		SELECT
 			a.id,
@@ -188,10 +203,10 @@ func (r *Repo) GetAgencyTotals(titleFilter *string) ([]domain.AgencyMetric, erro
 			a.parent_id,
 			COALESCE(at.total_words, 0) as total_words,
 			COALESCE(rscs.avg_rscs, 0) as avg_rscs,
-			COALESCE(CAST(wl.weighted_lsa AS INTEGER), 0) as lsa_counts
+			COALESCE(lsa.total_documents, 0) as lsa_counts
 		FROM agencies a
 		LEFT JOIN agency_totals at ON at.agency_id = a.id
-		LEFT JOIN weighted_lsa wl ON wl.agency_id = a.id
+		LEFT JOIN latest_agency_lsa lsa ON lsa.agency_id = a.id
 		LEFT JOIN (
 			-- Compute avg RSCS per agency
 			SELECT
@@ -208,6 +223,7 @@ func (r *Repo) GetAgencyTotals(titleFilter *string) ([]domain.AgencyMetric, erro
 	args := []any{}
 	if titleFilter != nil && *titleFilter != "" {
 		// For title filter, we need to filter the CTEs
+		// Note: LSA counts are still per-agency (not filtered by title) since they come from Federal Register API
 		query = `
 		WITH agency_title_words AS (
 			SELECT
@@ -226,19 +242,10 @@ func (r *Repo) GetAgencyTotals(titleFilter *string) ([]domain.AgencyMetric, erro
 			FROM agency_title_words
 			GROUP BY agency_id
 		),
-		weighted_lsa AS (
-			SELECT
-				atw.agency_id,
-				SUM(
-					CASE WHEN at.total_words > 0
-					THEN (CAST(atw.title_words AS REAL) / at.total_words)
-						 * (COALESCE(l.proposals, 0) + COALESCE(l.amendments, 0) + COALESCE(l.finals, 0))
-					ELSE 0 END
-				) as weighted_lsa
-			FROM agency_title_words atw
-			JOIN agency_totals at ON at.agency_id = atw.agency_id
-			LEFT JOIN lsa_activity l ON l.title = CAST(atw.title AS TEXT)
-			GROUP BY atw.agency_id
+		latest_agency_lsa AS (
+			SELECT agency_id, total_documents
+			FROM agency_lsa
+			WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM agency_lsa)
 		)
 		SELECT
 			a.id,
@@ -246,10 +253,10 @@ func (r *Repo) GetAgencyTotals(titleFilter *string) ([]domain.AgencyMetric, erro
 			a.parent_id,
 			COALESCE(at.total_words, 0) as total_words,
 			COALESCE(rscs.avg_rscs, 0) as avg_rscs,
-			COALESCE(CAST(wl.weighted_lsa AS INTEGER), 0) as lsa_counts
+			COALESCE(lsa.total_documents, 0) as lsa_counts
 		FROM agencies a
 		LEFT JOIN agency_totals at ON at.agency_id = a.id
-		LEFT JOIN weighted_lsa wl ON wl.agency_id = a.id
+		LEFT JOIN latest_agency_lsa lsa ON lsa.agency_id = a.id
 		LEFT JOIN (
 			SELECT
 				acr.agency_id,
@@ -285,15 +292,85 @@ func (r *Repo) GetAgencyTotals(titleFilter *string) ([]domain.AgencyMetric, erro
 	return metrics, nil
 }
 
-// InsertLSA inserts or updates LSA activity data for a title
-func (r *Repo) InsertLSA(lsa domain.LSAActivity, snapshotDate string) error {
+// InsertAgencyLSA inserts or updates LSA activity data for an agency
+func (r *Repo) InsertAgencyLSA(lsa domain.AgencyLSA) error {
 	_, err := r.db.Exec(`
-		INSERT OR REPLACE INTO lsa_activity
-		(title, snapshot_date, proposals, amendments, finals, captured_at, source_hint)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		lsa.Key, snapshotDate, lsa.ProposalsCount, lsa.AmendmentsCount,
-		lsa.FinalsCount, lsa.CapturedAt, lsa.SourceHint)
+		INSERT OR REPLACE INTO agency_lsa
+		(agency_id, agency_name, proposed_rules, final_rules, notices, total_documents, snapshot_date, captured_at, source_hint)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		lsa.AgencyID, lsa.AgencyName, lsa.ProposedRules, lsa.FinalRules,
+		lsa.Notices, lsa.TotalDocuments, lsa.SnapshotDate, lsa.CapturedAt, lsa.SourceHint)
 	return err
+}
+
+// InsertAgencyLSABatch inserts multiple agency LSA records in a transaction
+func (r *Repo) InsertAgencyLSABatch(lsaRecords []domain.AgencyLSA) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`
+		INSERT OR REPLACE INTO agency_lsa
+		(agency_id, agency_name, proposed_rules, final_rules, notices, total_documents, snapshot_date, captured_at, source_hint)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, lsa := range lsaRecords {
+		_, err = stmt.Exec(lsa.AgencyID, lsa.AgencyName, lsa.ProposedRules, lsa.FinalRules,
+			lsa.Notices, lsa.TotalDocuments, lsa.SnapshotDate, lsa.CapturedAt, lsa.SourceHint)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// GetAgencyLSA retrieves the latest LSA data for a specific agency
+func (r *Repo) GetAgencyLSA(agencyID string) (*domain.AgencyLSA, error) {
+	var lsa domain.AgencyLSA
+	err := r.db.QueryRow(`
+		SELECT agency_id, agency_name, proposed_rules, final_rules, notices, total_documents, snapshot_date, captured_at, source_hint
+		FROM agency_lsa
+		WHERE agency_id = ?
+		ORDER BY snapshot_date DESC
+		LIMIT 1`, agencyID).Scan(
+		&lsa.AgencyID, &lsa.AgencyName, &lsa.ProposedRules, &lsa.FinalRules,
+		&lsa.Notices, &lsa.TotalDocuments, &lsa.SnapshotDate, &lsa.CapturedAt, &lsa.SourceHint)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &lsa, nil
+}
+
+// GetAllAgencyLSA retrieves the latest LSA data for all agencies
+func (r *Repo) GetAllAgencyLSA() ([]domain.AgencyLSA, error) {
+	rows, err := r.db.Query(`
+		SELECT agency_id, agency_name, proposed_rules, final_rules, notices, total_documents, snapshot_date, captured_at, source_hint
+		FROM agency_lsa
+		WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM agency_lsa)
+		ORDER BY total_documents DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []domain.AgencyLSA
+	for rows.Next() {
+		var lsa domain.AgencyLSA
+		if err := rows.Scan(&lsa.AgencyID, &lsa.AgencyName, &lsa.ProposedRules, &lsa.FinalRules,
+			&lsa.Notices, &lsa.TotalDocuments, &lsa.SnapshotDate, &lsa.CapturedAt, &lsa.SourceHint); err != nil {
+			return nil, err
+		}
+		results = append(results, lsa)
+	}
+	return results, nil
 }
 
 // GetAgencyChecksum computes a SHA256 hash of all section content for an agency

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/govinfo"
-	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/lsa"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/domain"
@@ -22,13 +21,12 @@ import (
 type Ingest struct {
 	logger      *zap.Logger
 	govinfo     *govinfo.Client
-	lsa         *lsa.Collector
 	parquetRepo *parquet.Repo
 	sqliteRepo  *sqlite.Repo
 }
 
-func NewIngest(logger *zap.Logger, govinfo *govinfo.Client, lsa *lsa.Collector, parquet *parquet.Repo, sqlite *sqlite.Repo) *Ingest {
-	return &Ingest{logger: logger, govinfo: govinfo, lsa: lsa, parquetRepo: parquet, sqliteRepo: sqlite}
+func NewIngest(logger *zap.Logger, govinfo *govinfo.Client, parquet *parquet.Repo, sqlite *sqlite.Repo) *Ingest {
+	return &Ingest{logger: logger, govinfo: govinfo, parquetRepo: parquet, sqliteRepo: sqlite}
 }
 
 func (u *Ingest) FetchChangedTitles(ctx context.Context) ([]domain.Title, error) {
