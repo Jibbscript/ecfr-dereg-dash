@@ -7,6 +7,7 @@ import (
 
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/duck"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/govinfo"
+	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/lsa"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/parquet"
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/adapter/sqlite"
 	delivery "github.com/Jibbscript/ecfr-dereg-dashboard/internal/delivery/http"
@@ -48,6 +49,23 @@ func main() {
 	sqliteRepo, err := sqlite.NewRepo(config.DataDir + "/ecfr.db")
 	if err != nil {
 		logger.Fatal("Failed to create SQLite repo", zap.Error(err))
+	}
+
+	// Collect LSA data on startup if stale or missing
+	hasRecent, err := sqliteRepo.HasRecentAgencyLSA(1)
+	if err != nil || !hasRecent {
+		logger.Info("Collecting fresh LSA data from Federal Register API")
+		lsaCollector := lsa.NewCollector()
+		records, lsaErr := lsaCollector.CollectAgencyLSABatch(ctx)
+		if lsaErr != nil {
+			logger.Warn("LSA collection failed", zap.Error(lsaErr))
+		} else {
+			if insertErr := sqliteRepo.InsertAgencyLSABatch(records); insertErr != nil {
+				logger.Warn("LSA insert failed", zap.Error(insertErr))
+			} else {
+				logger.Info("LSA data refreshed", zap.Int("agencies", len(records)))
+			}
+		}
 	}
 
 	duckHelper, err := duck.NewHelper(parquetRepo, sqliteRepo, config.DuckDBUI)

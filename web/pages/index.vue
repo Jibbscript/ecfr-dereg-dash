@@ -68,6 +68,46 @@
     <!-- RSCS Explainer Modal now provided globally in layout -->
     <AiSummariesModal v-model:visible="showAiSummaries" />
 
+    <!-- LSA Explainer Modal -->
+    <div v-if="showLsaExplainer" class="usa-modal-wrapper is-visible">
+      <div class="usa-modal-overlay" @click="showLsaExplainer = false">
+        <div class="usa-modal usa-modal--sm" @click.stop aria-labelledby="lsa-modal-heading" role="dialog">
+          <div class="usa-modal__content">
+            <div class="usa-modal__main">
+              <h2 class="usa-modal__heading" id="lsa-modal-heading">
+                LSA Activity
+              </h2>
+              <div class="usa-prose">
+                <p>
+                  <strong>LSA Activity</strong> (List of CFR Sections Affected) tracks recent regulatory changes
+                  from the Federal Register for each agency over the past 30 days.
+                </p>
+                <p>This count includes:</p>
+                <ul>
+                  <li><strong>Proposed Rules</strong> — Regulations under consideration</li>
+                  <li><strong>Final Rules</strong> — Newly enacted regulations</li>
+                  <li><strong>Notices</strong> — Agency announcements and guidance</li>
+                </ul>
+                <p class="text-base font-body-2xs">
+                  Data sourced from the Federal Register API and refreshed daily.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="usa-button usa-modal__close"
+              aria-label="Close this window"
+              @click="showLsaExplainer = false"
+            >
+              <svg class="usa-icon" aria-hidden="true" focusable="false" role="img" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Data Section -->
     <section class="grid-container margin-top-4" aria-label="Agency data">
       <div class="section-header">
@@ -173,7 +213,32 @@
                   </button>
                 </div>
               </th>
-              <th scope="col">LSA Activity</th>
+              <th scope="col">
+                <div class="th-header-group">
+                  <button
+                    type="button"
+                    class="usa-button--unstyled sortable-header"
+                    @click="sortBy('lsa_counts')"
+                    :aria-sort="sortKey === 'lsa_counts' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'"
+                  >
+                    LSA Activity
+                    <span class="sort-indicator" v-if="sortKey === 'lsa_counts'">
+                      {{ sortDir === 'asc' ? '▲' : '▼' }}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    class="usa-button--unstyled info-icon"
+                    aria-label="Open LSA Activity explanation"
+                    aria-haspopup="dialog"
+                    @click.stop="showLsaExplainer = true"
+                  >
+                    <svg class="usa-icon" aria-hidden="true" focusable="false" role="img" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                    </svg>
+                  </button>
+                </div>
+              </th>
               <th v-if="includeChecksum" scope="col">Content Checksum</th>
             </tr>
           </thead>
@@ -257,6 +322,7 @@ const sortKey = ref('total_words')
 const sortDir = ref('desc')
 const explainer = useRscsExplainer()
 const showAiSummaries = ref(false)
+const showLsaExplainer = ref(false)
 
 // Truncate checksum for display (show first 8 chars)
 function truncateChecksum(hash) {

@@ -373,6 +373,14 @@ func (r *Repo) GetAllAgencyLSA() ([]domain.AgencyLSA, error) {
 	return results, nil
 }
 
+// HasRecentAgencyLSA checks if there is agency LSA data within the specified number of days
+func (r *Repo) HasRecentAgencyLSA(withinDays int) (bool, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM agency_lsa WHERE snapshot_date >= date('now', '-' || ? || ' days')`
+	err := r.db.QueryRow(query, withinDays).Scan(&count)
+	return count > 0, err
+}
+
 // GetAgencyChecksum computes a SHA256 hash of all section content for an agency
 func (r *Repo) GetAgencyChecksum(agencyID string) (string, error) {
 	query := `
