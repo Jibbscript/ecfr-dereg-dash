@@ -143,3 +143,4 @@ Copy `.env.template` to `.env`. Key variables:
 - **AiSummariesModal** - Browse all 50 title summaries with accordion UI
 - **RscsExplainerModal** - Centralized RSCS methodology explainer
 - **useRscsExplainer composable** - Global modal state management (provide/inject pattern)
+- The web frontend is now correctly proxying API requests. The issue was that API_BASE_URL needs to be passed at build time (not runtime) because Nitro bakes the proxy configuration into the build.

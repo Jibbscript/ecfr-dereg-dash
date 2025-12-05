@@ -183,7 +183,7 @@ func main() {
 	sqliteWg.Wait()
 
 	// Step 4: Collect Agency-level LSA data from Federal Register API
-	logger.Info("Step 4/5: Collecting agency-level LSA data (Transform)")
+	logger.Info("Step 4/6: Collecting agency-level LSA data (Transform)")
 	agencyLSAStart := time.Now()
 
 	agencyLSARecords, err := lsaCollector.CollectAgencyLSABatch(ctx)
@@ -207,6 +207,54 @@ func main() {
 		} else {
 			logger.Info("Agency LSA data written to Parquet")
 		}
+	}
+
+	// Step 5: Pre-compute agency content checksums
+	logger.Info("Step 5/6: Pre-computing agency content checksums")
+	checksumStart := time.Now()
+
+	agencyIDs, err := sqliteRepo.GetAllAgencyIDs()
+	if err != nil {
+		logger.Error("Failed to get agency IDs for checksum computation", zap.Error(err))
+	} else {
+		// Compute checksums concurrently
+		checksumSem := make(chan struct{}, 10) // Limit concurrency
+		var checksumWg sync.WaitGroup
+		var checksumCount int
+		var checksumMu sync.Mutex
+
+		for _, agencyID := range agencyIDs {
+			checksumWg.Add(1)
+			checksumSem <- struct{}{} // Acquire
+
+			go func(id string) {
+				defer checksumWg.Done()
+				defer func() { <-checksumSem }() // Release
+
+				checksum, err := sqliteRepo.GetAgencyChecksum(id)
+				if err != nil {
+					logger.Error("Failed to compute checksum", zap.String("agency", id), zap.Error(err))
+					return
+				}
+				if checksum == "" {
+					return // No sections for this agency
+				}
+
+				if err := sqliteRepo.UpdateAgencyChecksum(id, checksum); err != nil {
+					logger.Error("Failed to update checksum", zap.String("agency", id), zap.Error(err))
+					return
+				}
+
+				checksumMu.Lock()
+				checksumCount++
+				checksumMu.Unlock()
+			}(agencyID)
+		}
+
+		checksumWg.Wait()
+		logger.Info("Agency checksums computed and stored",
+			zap.Int("count", checksumCount),
+			zap.Duration("duration", time.Since(checksumStart)))
 	}
 
 	logger.Info("ETL Pipeline Completed Successfully",

@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	"github.com/Jibbscript/ecfr-dereg-dashboard/internal/usecase"
 	"github.com/go-chi/chi/v5"
@@ -35,17 +36,43 @@ func SetupHandlers(r chi.Router, usecases Usecases, logger *zap.Logger) {
 			return
 		}
 
-		// Populate checksums if requested
+		// Populate checksums if requested (use pre-computed if available, compute on-demand otherwise)
 		if includeChecksum {
+			// Find agencies without pre-computed checksums
+			var needsChecksum []int
 			for i := range agencies {
-				checksum, err := usecases.Metrics.GetAgencyChecksum(agencies[i].ID)
-				if err != nil {
-					logger.Warn("Failed to get checksum for agency",
-						zap.String("agency_id", agencies[i].ID),
-						zap.Error(err))
-					continue
+				if agencies[i].ContentChecksum == "" {
+					needsChecksum = append(needsChecksum, i)
 				}
-				agencies[i].ContentChecksum = checksum
+			}
+
+			// Compute missing checksums concurrently
+			if len(needsChecksum) > 0 {
+				var wg sync.WaitGroup
+				var mu sync.Mutex
+				sem := make(chan struct{}, 10) // Limit concurrency to 10
+
+				for _, idx := range needsChecksum {
+					wg.Add(1)
+					go func(i int) {
+						defer wg.Done()
+						sem <- struct{}{}        // Acquire
+						defer func() { <-sem }() // Release
+
+						checksum, err := usecases.Metrics.GetAgencyChecksum(agencies[i].ID)
+						if err != nil {
+							logger.Warn("Failed to get checksum for agency",
+								zap.String("agency_id", agencies[i].ID),
+								zap.Error(err))
+							return
+						}
+
+						mu.Lock()
+						agencies[i].ContentChecksum = checksum
+						mu.Unlock()
+					}(idx)
+				}
+				wg.Wait()
 			}
 		}
 

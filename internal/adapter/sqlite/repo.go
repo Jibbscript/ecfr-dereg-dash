@@ -146,6 +146,14 @@ func NewRepo(path string) (*Repo, error) {
 	}
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_summaries_kind_key ON summaries(kind, key)`)
 
+	// Create indexes on sections table for faster checksum queries
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_sections_title ON sections(title)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_sections_agency_id ON sections(agency_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_sections_title_agency ON sections(title, agency_id)`)
+
+	// Add content_checksum column to agencies table if it doesn't exist
+	db.Exec(`ALTER TABLE agencies ADD COLUMN content_checksum TEXT`)
+
 	return &Repo{Path: path, db: db}, nil
 }
 
@@ -203,7 +211,8 @@ func (r *Repo) GetAgencyTotals(titleFilter *string) ([]domain.AgencyMetric, erro
 			a.parent_id,
 			COALESCE(at.total_words, 0) as total_words,
 			COALESCE(rscs.avg_rscs, 0) as avg_rscs,
-			COALESCE(lsa.total_documents, 0) as lsa_counts
+			COALESCE(lsa.total_documents, 0) as lsa_counts,
+			a.content_checksum
 		FROM agencies a
 		LEFT JOIN agency_totals at ON at.agency_id = a.id
 		LEFT JOIN latest_agency_lsa lsa ON lsa.agency_id = a.id
@@ -253,7 +262,8 @@ func (r *Repo) GetAgencyTotals(titleFilter *string) ([]domain.AgencyMetric, erro
 			a.parent_id,
 			COALESCE(at.total_words, 0) as total_words,
 			COALESCE(rscs.avg_rscs, 0) as avg_rscs,
-			COALESCE(lsa.total_documents, 0) as lsa_counts
+			COALESCE(lsa.total_documents, 0) as lsa_counts,
+			a.content_checksum
 		FROM agencies a
 		LEFT JOIN agency_totals at ON at.agency_id = a.id
 		LEFT JOIN latest_agency_lsa lsa ON lsa.agency_id = a.id
@@ -284,8 +294,12 @@ func (r *Repo) GetAgencyTotals(titleFilter *string) ([]domain.AgencyMetric, erro
 	var metrics []domain.AgencyMetric
 	for rows.Next() {
 		var m domain.AgencyMetric
-		if err := rows.Scan(&m.ID, &m.Name, &m.ParentID, &m.TotalWords, &m.AvgRSCS, &m.LSACounts); err != nil {
+		var checksum sql.NullString
+		if err := rows.Scan(&m.ID, &m.Name, &m.ParentID, &m.TotalWords, &m.AvgRSCS, &m.LSACounts, &checksum); err != nil {
 			return nil, err
+		}
+		if checksum.Valid {
+			m.ContentChecksum = checksum.String
 		}
 		metrics = append(metrics, m)
 	}
@@ -413,6 +427,31 @@ func (r *Repo) GetAgencyChecksum(agencyID string) (string, error) {
 
 	hash := sha256.Sum256([]byte(combined.String()))
 	return hex.EncodeToString(hash[:]), nil
+}
+
+// UpdateAgencyChecksum updates the pre-computed checksum for an agency
+func (r *Repo) UpdateAgencyChecksum(agencyID, checksum string) error {
+	_, err := r.db.Exec(`UPDATE agencies SET content_checksum = ? WHERE id = ?`, checksum, agencyID)
+	return err
+}
+
+// GetAllAgencyIDs returns all agency IDs from the agencies table
+func (r *Repo) GetAllAgencyIDs() ([]string, error) {
+	rows, err := r.db.Query(`SELECT id FROM agencies`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 // InsertSummary inserts or updates a single summary
