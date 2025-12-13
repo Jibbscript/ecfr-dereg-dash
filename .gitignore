@@ -61,3 +61,4 @@ infra/*.tfvars
 *.swp
 *.swo
 *~
+*.workspace

@@ -1,41 +1,120 @@
-# eCFR Deregulation Dashboard MVP
+# eCFR Deregulation Dashboard
 
 ## Live Demo
 
 🚀 **Access the live dashboard here:** [https://ecfr-web-369420849740.us-central1.run.app](https://ecfr-web-369420849740.us-central1.run.app)
 
 ## Overview
-Analytics app over eCFR corpus with RSCS metric, LSA changes, AI summaries. Backend in Go, frontend in Nuxt+USWDS, persistence in Parquet+SQLite, analytics via DuckDB.
+
+An analytics dashboard for exploring the regulatory complexity of the Code of Federal Regulations (eCFR). The system calculates the **RSCS (Regulatory Complexity Score)** metric per 1,000 words, tracks **LSA (List of Sections Affected)** activity from the Federal Register, and provides AI-generated summaries for titles and sections.
+
+**Tech Stack:**
+- **Backend**: Go 1.24+ with Chi router, clean architecture
+- **Frontend**: Nuxt 3 + Vue 3, USWDS design system
+- **Storage**: SQLite (metadata), Parquet (daily snapshots)
+- **Analytics**: DuckDB for fast aggregations
+- **AI**: Vertex AI / Anthropic for summaries
+
+## Prerequisites
+
+- **Go**: 1.24+
+- **Node.js**: 18+ with npm (or bun)
+- **Docker** (optional): For containerized deployment
+
+## Quick Start
+
+### 1. Environment Setup
+```bash
+cp .env.template .env
+```
+
+For local development, the defaults work out of the box:
+- `ENV=local` — Uses local filesystem instead of GCS
+- `DATA_DIR=./data` — Location of SQLite DB and Parquet files
+- `DUCKDB_UI=1` — Enables DuckDB Web UI at `:4213`
+
+### 2. Data Requirements
+The `data/` directory must contain:
+- `ecfr.db` — SQLite database with metadata
+- Date-partitioned Parquet files (e.g., `parquet/2025-01-15/*.parquet`)
+
+To populate data, run the ETL pipeline (see [ETL_GUIDE.md](ETL_GUIDE.md)).
+
+### 3a. Run Without Docker (Recommended for Development)
+
+**Terminal 1 — API Server:**
+```bash
+go run ./cmd/api
+```
+API runs on `http://localhost:8080`
+
+**Terminal 2 — Frontend Dev Server:**
+```bash
+cd web
+npm install
+npm run dev
+```
+UI runs on `http://localhost:3000` with hot reload.
+
+### 3b. Run With Docker
+```bash
+docker-compose up
+```
+- **UI**: `http://localhost:3000`
+- **API**: `http://localhost:8080`
+- **DuckDB UI**: `http://localhost:4213` (if `DUCKDB_UI=1`)
 
 ## User Guide
 
 ### Navigation
 The dashboard provides an intuitive interface to explore federal regulations:
 
-1.  **Agency Overview**: Start here to see a list of all federal agencies.
-    *   **Metrics**: View total word counts and average Regulatory Restrictions (RSCS) scores for each agency.
-    *   **Sort & Filter**: Use the table headers to sort agencies by complexity or volume.
-    *   **Drill Down**: Click on an Agency name to explore its specific Titles and regulations.
+1. **Agency Overview**: Start here to see a list of all federal agencies.
+   - **Metrics**: View total word counts, average RSCS scores, and LSA activity for each agency.
+   - **Sort & Filter**: Use table headers to sort by complexity or volume; filter by CFR Title.
+   - **Hierarchy**: Expand departments to see their sub-agencies.
 
-2.  **Title Explorer**:
-    *   View detailed metrics for specific Titles of the Code of Federal Regulations.
-    *   Read AI-generated summaries that distill complex regulatory text into key points, agencies involved, and scope.
-    *   Navigate through the hierarchy of Parts and Sections.
+2. **Key Metrics Explained**:
+   - **RSCS (Regulatory Complexity Score)**: Measures complexity based on word count, definitions, cross-references, and modal verbs ("shall", "must", etc.) per 1,000 words.
+   - **LSA Activity**: Counts of proposed rules, final rules, and notices from the Federal Register API (last 30 days).
 
-3.  **Section View**:
-    *   **Full Text**: Access the complete, official text of individual regulations.
-    *   **Complexity Analysis**: See the RSCS score per 1,000 words to understand the regulatory burden.
-    *   **AI Summary**: Quickly grasp the intent and requirements of a section without reading the full legalese.
-
-## Setup
-1. Clone repo
-2. Copy `.env.template` to `.env`, fill keys
-3. Local: `docker-compose up`
-4. Access UI at `localhost:3000`, API at `8080`
+3. **AI Summaries**: Click the "AI Summaries" button to view machine-generated summaries of titles and sections.
 
 ## Usage
-- ETL: Run `cmd/etl` for refresh
-- Dev: DuckDB UI at `localhost:4213` (if enabled)
+
+### ETL Pipeline
+Refresh the regulatory data by running the ETL pipeline:
+```bash
+go run ./cmd/etl
+```
+
+The pipeline:
+1. Fetches changed titles from the eCFR API
+2. Downloads and parses XML from GovInfo
+3. Computes RSCS metrics for each section
+4. Collects agency-level LSA data from Federal Register
+5. Writes snapshots to Parquet and SQLite
+
+For full details, see [ETL_GUIDE.md](ETL_GUIDE.md).
+
+### Development Commands
+
+**Backend:**
+```bash
+go build -o api ./cmd/api      # Build API
+go build -o etl ./cmd/etl      # Build ETL
+go test ./...                   # Run all tests
+```
+
+**Frontend:**
+```bash
+cd web
+npm install                     # Install dependencies
+npm run dev                     # Dev server with hot reload
+npm run build                   # Production build
+npm run test                    # Unit tests (Vitest)
+npm run test:e2e               # E2E tests (Playwright)
+```
 
 ## DuckDB Local Analytics
 
@@ -142,4 +221,86 @@ LIMIT 10;
 ```
 
 ## Architecture
-The system follows clean architecture in Go, with domain entities, use cases, adapters for external services (eCFR, GovInfo, Anthropic), and HTTP delivery. Data flows from ETL (fetches eCFR titles/sections, computes metrics, generates summaries) to Parquet partitions (by date/title) and SQLite mirror. DuckDB queries Parquet for fast aggregates in API. Frontend consumes API, rendering USWDS-compliant pages for agencies, titles, sections.
+
+The system follows **Clean Architecture** in Go:
+
+```
+internal/
+├── domain/       # Core entities (Agency, Section, Summary, etc.)
+├── usecase/      # Business logic (Ingest, Metrics, Snapshot, Summaries)
+├── adapter/      # External integrations
+│   ├── ecfr/     # eCFR API client
+│   ├── govinfo/  # GovInfo XML/GCS client
+│   ├── parquet/  # Local & GCS Parquet storage
+│   ├── sqlite/   # SQLite repository
+│   ├── duck/     # DuckDB analytics helper
+│   ├── lsa/      # Federal Register API collector
+│   ├── anthropic/# Anthropic Claude client
+│   └── vertexai/ # Google Vertex AI client
+└── delivery/
+    └── http/     # Chi router, handlers, DTOs
+```
+
+**Data Flow:**
+1. **ETL** fetches eCFR titles/sections from GovInfo, computes metrics, generates summaries
+2. Results stored in Parquet (date-partitioned snapshots) and SQLite (metadata mirror)
+3. **API** queries DuckDB over Parquet for fast aggregates; SQLite for metadata
+4. **Frontend** (Nuxt/Vue) renders USWDS-compliant pages
+
+## Project Structure
+
+```
+├── cmd/
+│   ├── api/              # HTTP API server
+│   └── etl/              # ETL pipeline
+├── internal/             # Go application code (clean architecture)
+├── web/                  # Nuxt 3 frontend
+│   ├── components/       # Vue components
+│   ├── composables/      # Vue composables
+│   ├── pages/            # Route pages
+│   └── tests/            # Vitest & Playwright tests
+├── data/                 # SQLite DB & Parquet files (gitignored)
+├── infra/                # Terraform IaC
+├── openapi.yaml          # API specification
+├── docker-compose.yml    # Local multi-service setup
+└── Dockerfile.*          # Container definitions
+```
+
+## API Reference
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/agencies` | List agencies with word counts, RSCS, LSA activity |
+| `GET /api/agencies?title=12` | Filter agencies by CFR title |
+| `GET /api/agencies?include_checksum=true` | Include content checksums |
+| `GET /api/titles/{id}` | Title metrics and summary |
+| `GET /api/sections/{id}` | Section text, RSCS, and summary |
+| `GET /api/summaries` | All AI-generated summaries |
+
+See [API.md](API.md) and [openapi.yaml](openapi.yaml) for full specification.
+
+## Testing
+
+**Backend (Go):**
+```bash
+go test ./...                           # All tests
+go test -v ./internal/usecase -run TestMetrics  # Single test
+```
+
+**Frontend (Vitest + Playwright):**
+```bash
+cd web
+npm run test        # Unit tests
+npm run test:e2e    # E2E tests
+```
+
+## Documentation
+
+- [API.md](API.md) — API endpoints reference
+- [DEPLOY.md](DEPLOY.md) — Deployment guide (local & GCP)
+- [ETL_GUIDE.md](ETL_GUIDE.md) — ETL pipeline details
+- [SCHEMA.md](SCHEMA.md) — Database schema
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
