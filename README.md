@@ -235,7 +235,7 @@ internal/
 │   ├── sqlite/   # SQLite repository
 │   ├── duck/     # DuckDB analytics helper
 │   ├── lsa/      # Federal Register API collector
-│   ├── anthropic/# Anthropic Claude client
+│   ├── anthropic/# Anthropic Claude client (Deprecated)
 │   └── vertexai/ # Google Vertex AI client
 └── delivery/
     └── http/     # Chi router, handlers, DTOs
